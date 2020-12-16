@@ -82,8 +82,8 @@ function App() {
       <Container>
         <h1>Mbanq BSA</h1>
         <p>Mbanq BSA indexes the following lists:</p>
-        <p>1. US Treasury - Office of Foreign Assets Control (OFAC) Specially Designated Nationals (SDN) : Includes SDN, SDN Alternative Names, SDN Addresses Sectoral Sanctions Identifications (SSI)</p>
-        <p>2. US Department of Commerce - Bureau of Industry and Security (BIS) Denied Persons List (DPL) Entity List (EL)</p>
+        <p>1. US Treasury - Office of Foreign Assets Control (OFAC), Specially Designated Nationals (SDN) which includes SDN, SDN Alternative Names and SDN Addresses Sectoral Sanctions Identifications (SSI).</p>
+        <p>2. US Department of Commerce - Bureau of Industry and Security (BIS), Denied Persons List (DPL) and Entity List (EL).</p>
       </Container>
       <Form onSubmit={handleSubmit} onReset={handleReset} />
       <Results data={state} />
