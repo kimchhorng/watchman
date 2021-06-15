@@ -10,18 +10,21 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/moov-io/base/strx"
 	"github.com/moov-io/watchman/pkg/csl"
 	"github.com/moov-io/watchman/pkg/dpl"
 	"github.com/moov-io/watchman/pkg/ofac"
 
 	"github.com/go-kit/kit/log"
 	"github.com/xrash/smetrics"
+	"go4.org/syncutil"
 )
 
 var (
@@ -46,10 +49,20 @@ type searcher struct {
 	// metadata
 	lastRefreshedAt time.Time
 	sync.RWMutex    // protects all above fields
+	*syncutil.Gate  // limits concurrent processing
 
 	pipe *pipeliner
 
 	logger log.Logger
+}
+
+func newSearcher(logger log.Logger, pipeline *pipeliner, workers int) *searcher {
+	logger.Log("search", fmt.Sprintf("allowing only %d workers", workers))
+	return &searcher{
+		logger: logger,
+		pipe:   pipeline,
+		Gate:   syncutil.NewGate(workers),
+	}
 }
 
 func (s *searcher) FindAddresses(limit int, id string) []*ofac.Address {
@@ -68,11 +81,11 @@ func (s *searcher) FindAddresses(limit int, id string) []*ofac.Address {
 	return out
 }
 
-func (s *searcher) TopAddresses(limit int, reqAddress string) []Address {
+func (s *searcher) TopAddresses(limit int, minMatch float64, reqAddress string) []Address {
 	s.RLock()
 	defer s.RUnlock()
 
-	return TopAddressesFn(limit, s.Addresses, topAddressesAddress(reqAddress))
+	return TopAddressesFn(limit, minMatch, s.Addresses, topAddressesAddress(reqAddress))
 }
 
 var (
@@ -157,14 +170,24 @@ func (s *searcher) FilterCountries(name string) []*Address {
 // compare takes an Address (from s.Addresses) and is expected to extract some property to be compared
 // against a captured parameter (in a closure calling compare) to return an *item for final sorting.
 // See searchByAddress in search_handlers.go for an example
-func TopAddressesFn(limit int, addresses []*Address, compare func(*Address) *item) []Address {
+func TopAddressesFn(limit int, minMatch float64, addresses []*Address, compare func(*Address) *item) []Address {
 	if len(addresses) == 0 {
 		return nil
 	}
-	xs := newLargest(limit)
+	xs := newLargest(limit, minMatch)
+
+	var wg sync.WaitGroup
+	wg.Add(len(addresses))
+
 	for i := range addresses {
-		xs.add(compare(addresses[i]))
+		go func(i int) {
+			defer wg.Done()
+			xs.add(compare(addresses[i]))
+		}(i)
 	}
+
+	wg.Wait()
+
 	return largestToAddresses(xs)
 }
 
@@ -200,7 +223,7 @@ func (s *searcher) FindAlts(limit int, id string) []*ofac.AlternateIdentity {
 	return out
 }
 
-func (s *searcher) TopAltNames(limit int, alt string) []Alt {
+func (s *searcher) TopAltNames(limit int, minMatch float64, alt string) []Alt {
 	alt = precompute(alt)
 
 	s.RLock()
@@ -209,14 +232,23 @@ func (s *searcher) TopAltNames(limit int, alt string) []Alt {
 	if len(s.Alts) == 0 {
 		return nil
 	}
-	xs := newLargest(limit)
+	xs := newLargest(limit, minMatch)
+
+	var wg sync.WaitGroup
+	wg.Add(len(s.Alts))
 
 	for i := range s.Alts {
-		xs.add(&item{
-			value:  s.Alts[i],
-			weight: jaroWinkler(s.Alts[i].name, alt),
-		})
+		s.Gate.Start()
+		go func(i int) {
+			defer wg.Done()
+			defer s.Gate.Done()
+			xs.add(&item{
+				value:  s.Alts[i],
+				weight: jaroWinkler(s.Alts[i].name, alt),
+			})
+		}(i)
 	}
+	wg.Wait()
 
 	out := make([]Alt, 0)
 	for i := range xs.items {
@@ -255,12 +287,12 @@ func (s *searcher) debugSDN(entityID string) *SDN {
 // FindSDNsByRemarksID looks for SDN's whose remarks property contains an ID matching
 // what is provided to this function. It's typically used with values assigned by a local
 // government. (National ID, Drivers License, etc)
-func (s *searcher) FindSDNsByRemarksID(limit int, id string) []SDN {
+func (s *searcher) FindSDNsByRemarksID(limit int, id string) []*SDN {
 	if id == "" {
 		return nil
 	}
 
-	var out []SDN
+	var out []*SDN
 	for i := range s.SDNs {
 		// If the SDN's remarks ID contains a space then we need to ensure "all the numeric
 		// parts have to exactly match" between our query and the parsed ID.
@@ -287,14 +319,14 @@ func (s *searcher) FindSDNsByRemarksID(limit int, id string) []SDN {
 			if matched == expected {
 				sdn := *s.SDNs[i]
 				sdn.match = 1.0
-				out = append(out, sdn)
+				out = append(out, &sdn)
 			}
 		} else {
 			// The query and remarks ID must exactly match
 			if s.SDNs[i].id == id {
 				sdn := *s.SDNs[i]
 				sdn.match = 1.0
-				out = append(out, sdn)
+				out = append(out, &sdn)
 			}
 		}
 
@@ -306,7 +338,7 @@ func (s *searcher) FindSDNsByRemarksID(limit int, id string) []SDN {
 	return out
 }
 
-func (s *searcher) TopSDNs(limit int, name string) []SDN {
+func (s *searcher) TopSDNs(limit int, minMatch float64, name string, keepSDN func(*SDN) bool) []*SDN {
 	name = precompute(name)
 
 	s.RLock()
@@ -315,16 +347,29 @@ func (s *searcher) TopSDNs(limit int, name string) []SDN {
 	if len(s.SDNs) == 0 {
 		return nil
 	}
-	xs := newLargest(limit)
+	xs := newLargest(limit, minMatch)
+
+	var wg sync.WaitGroup
+	wg.Add(len(s.SDNs))
 
 	for i := range s.SDNs {
-		xs.add(&item{
-			value:  s.SDNs[i],
-			weight: jaroWinkler(s.SDNs[i].name, name),
-		})
+		if !keepSDN(s.SDNs[i]) {
+			wg.Done()
+			continue
+		}
+		s.Gate.Start()
+		go func(i int) {
+			defer wg.Done()
+			defer s.Gate.Done()
+			xs.add(&item{
+				value:  s.SDNs[i],
+				weight: jaroWinkler(s.SDNs[i].name, name),
+			})
+		}(i)
 	}
+	wg.Wait()
 
-	out := make([]SDN, 0)
+	out := make([]*SDN, 0)
 	for i := range xs.items {
 		if v := xs.items[i]; v != nil {
 			ss, ok := v.value.(*SDN)
@@ -333,13 +378,13 @@ func (s *searcher) TopSDNs(limit int, name string) []SDN {
 			}
 			sdn := *ss // deref for a copy
 			sdn.match = v.weight
-			out = append(out, sdn)
+			out = append(out, &sdn)
 		}
 	}
 	return out
 }
 
-func (s *searcher) TopDPs(limit int, name string) []DP {
+func (s *searcher) TopDPs(limit int, minMatch float64, name string) []DP {
 	name = precompute(name)
 
 	s.RLock()
@@ -348,14 +393,23 @@ func (s *searcher) TopDPs(limit int, name string) []DP {
 	if len(s.DPs) == 0 {
 		return nil
 	}
-	xs := newLargest(limit)
+	xs := newLargest(limit, minMatch)
 
-	for _, dp := range s.DPs {
-		xs.add(&item{
-			value:  dp,
-			weight: jaroWinkler(dp.name, name),
-		})
+	var wg sync.WaitGroup
+	wg.Add(len(s.DPs))
+
+	for i := range s.DPs {
+		s.Gate.Start()
+		go func(i int) {
+			defer wg.Done()
+			defer s.Gate.Done()
+			xs.add(&item{
+				value:  s.DPs[i],
+				weight: jaroWinkler(s.DPs[i].name, name),
+			})
+		}(i)
 	}
+	wg.Wait()
 
 	out := make([]DP, 0)
 	for _, thisItem := range xs.items {
@@ -373,7 +427,7 @@ func (s *searcher) TopDPs(limit int, name string) []DP {
 }
 
 // TopSSIs searches Sectoral Sanctions records by Name and Alias
-func (s *searcher) TopSSIs(limit int, name string) []SSI {
+func (s *searcher) TopSSIs(limit int, minMatch float64, name string) []SSI {
 	name = precompute(name)
 
 	s.RLock()
@@ -382,24 +436,33 @@ func (s *searcher) TopSSIs(limit int, name string) []SSI {
 	if len(s.SSIs) == 0 {
 		return nil
 	}
-	xs := newLargest(limit)
+	xs := newLargest(limit, minMatch)
 
-	for _, ssi := range s.SSIs {
-		it := &item{
-			value:  ssi,
-			weight: jaroWinkler(ssi.name, name),
-		}
-		for _, alt := range ssi.SectoralSanction.AlternateNames {
-			if alt == "" {
-				continue
+	var wg sync.WaitGroup
+	wg.Add(len(s.SSIs))
+
+	for i := range s.SSIs {
+		s.Gate.Start()
+		go func(i int) {
+			defer wg.Done()
+			defer s.Gate.Done()
+			it := &item{
+				value:  s.SSIs[i],
+				weight: jaroWinkler(s.SSIs[i].name, name),
 			}
-			currWeight := jaroWinkler(alt, name)
-			if currWeight > it.weight {
-				it.weight = currWeight
+			for _, alt := range s.SSIs[i].SectoralSanction.AlternateNames {
+				if alt == "" {
+					continue
+				}
+				currWeight := jaroWinkler(alt, name)
+				if currWeight > it.weight {
+					it.weight = currWeight
+				}
 			}
-		}
-		xs.add(it)
+			xs.add(it)
+		}(i)
 	}
+	wg.Wait()
 
 	out := make([]SSI, 0)
 	for _, thisItem := range xs.items {
@@ -417,7 +480,7 @@ func (s *searcher) TopSSIs(limit int, name string) []SSI {
 }
 
 // TopBISEntities searches BIS Entity List records by name and alias
-func (s *searcher) TopBISEntities(limit int, name string) []BISEntity {
+func (s *searcher) TopBISEntities(limit int, minMatch float64, name string) []BISEntity {
 	name = precompute(name)
 
 	s.RLock()
@@ -427,24 +490,35 @@ func (s *searcher) TopBISEntities(limit int, name string) []BISEntity {
 		return nil
 	}
 
-	xs := newLargest(limit)
+	xs := newLargest(limit, minMatch)
 
-	for _, el := range s.BISEntities {
-		it := &item{
-			value:  el,
-			weight: jaroWinkler(el.name, name),
-		}
-		for _, alt := range el.Entity.AlternateNames {
-			if alt == "" {
-				continue
+	var wg sync.WaitGroup
+	wg.Add(len(s.BISEntities))
+
+	for i := range s.BISEntities {
+		s.Gate.Start()
+		go func(i int) {
+			defer wg.Done()
+			defer s.Gate.Done()
+
+			it := &item{
+				value:  s.BISEntities[i],
+				weight: jaroWinkler(s.BISEntities[i].name, name),
 			}
-			currWeight := jaroWinkler(alt, name)
-			if currWeight > it.weight {
-				it.weight = currWeight
+			for _, alt := range s.BISEntities[i].Entity.AlternateNames {
+				if alt == "" {
+					continue
+				}
+				currWeight := jaroWinkler(alt, name)
+				if currWeight > it.weight {
+					it.weight = currWeight
+				}
 			}
-		}
-		xs.add(it)
+
+			xs.add(it)
+		}(i)
 	}
+	wg.Wait()
 
 	out := make([]BISEntity, 0)
 	for _, thisItem := range xs.items {
@@ -721,7 +795,24 @@ func extractSearchLimit(r *http.Request) int {
 	return limit
 }
 
-// jaroWrinkler runs the similarly named algorithm over the two input strings and averages their match percentages
+func extractSearchMinMatch(r *http.Request) float64 {
+	if v := r.URL.Query().Get("minMatch"); v != "" {
+		n, _ := strconv.ParseFloat(v, 64)
+		return n
+	}
+	return 0.00
+}
+
+var (
+	exactMatchFavoritism = readExactMatchFavoritism(os.Getenv("EXACT_MATCH_FAVORITISM"))
+)
+
+func readExactMatchFavoritism(input string) float64 {
+	weight, _ := strconv.ParseFloat(strx.Or(input, "0.0"), 32)
+	return weight
+}
+
+// jaroWinkler runs the similarly named algorithm over the two input strings and averages their match percentages
 // according to the second string (assumed to be the user's query)
 //
 // For more details see https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance
@@ -746,7 +837,11 @@ func jaroWinkler(s1, s2 string) float64 {
 
 	var scores []float64
 	for i := range s1Parts {
-		scores = append(scores, maxMatch(s1Parts[i], s2Parts))
+		max := maxMatch(s1Parts[i], s2Parts)
+		if max >= 1.0 {
+			max += exactMatchFavoritism
+		}
+		scores = append(scores, max)
 	}
 
 	// average the highest N scores where N is the words in our query (s2).
@@ -759,6 +854,7 @@ func jaroWinkler(s1, s2 string) float64 {
 	for i := range scores {
 		sum += scores[i]
 	}
+
 	return sum / float64(len(scores))
 }
 

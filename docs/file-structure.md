@@ -1,7 +1,12 @@
+---
+layout: page
+title: File Structure
+hide_hero: true
+show_sidebar: false
+menubar: docs-menu
+---
 
-### Specially Designated National (SDN)
-
-## CSV Data Specifications
+# CSV Data Specifications - Specially Designated National (SDN)
 
 Format *.csv consists of records separated by carriage returns (ASCII character 
 13), with fields (values) within records delimited by the "," (comma) symbol 
@@ -9,7 +14,7 @@ Format *.csv consists of records separated by carriage returns (ASCII character
 
 Null values consist of "-0-" (ASCII characters 45, 48, 45).
 
-The Comma Separated Values (.csv), release consist of three  ASCII text files--a main
+The Comma Separated Values (.csv), release consists of three  ASCII text files -- a main
 file listing the name of the SDN and other information unique to that entity
 (sdn.csv), a file of addresses (add.csv),  and a file of alternate names (alt.csv).
 Addresses and alternate names are linked to particular SDNs using unique integer

@@ -1,9 +1,94 @@
-## v0.16.0 (Unreleased)
+## v0.19.0 (Released 2021-06-10)
+
+This release improves search results by filtering as part of scoring instead of after the fact.
+Users should see more results returned for queries now.
+
+ADDITIONS
+
+- cmd/server: add `?minMatch=0.95` query param for searching
+
+IMPROVEMENTS
+
+- cmd/server: remove unneeded X-User-ID HTTP headers
+- cmd/server: filter as part of searching, not after the fact
+
+BUILD
+
+- build: split CI into multiple jobs for parallel runs
+
+## v0.18.2 (Released 2021-06-01)
+
+BUG FIXES
+
+- cmd/server: nil check on webhook response body prior to Close
+
+BUILD
+
+- build(deps): bump nokogiri from 1.11.1 to 1.11.5 in /docs
+
+## v0.18.1 (Released 2021-05-20)
+
+BUG FIXES
+
+- csl: don't panic if list comes back invalid
+
+BUILD
+
+- build(deps): bump rexml from 3.2.4 to 3.2.5 in /docs
+- chore(deps): update dependency @material-ui/core to v4.11.4
+
+## v0.18.0 (Released 2021-04-29)
+
+IMPROVEMENTS
+
+- cmd/server: concurrently search instead of serial iterations
+
+BUILD
+
+- build: upgrade github.com/gogo/protobuf to v1.3.2
+
+## v0.17.1 (Released 2021-02-23)
+
+IMPROVEMENTS
+
+- chore(deps): update golang docker tag to v1.16
+
+## v0.17.0 (Released 2021-02-05)
+
+ADDITIONS
+
+- search: introduce `EXACT_MATCH_FAVORITISM` config to optionally boost match rates
+
+IMPROVEMENTS
+
+- docs: lots of fixups and clarifications
+
+BUG FIXES
+
+- csl: fix parsing with newer CSV format
+
+## v0.16.2 (Released 2021-02-02)
+
+BUILD
+
+- fix: upgrade react-scripts from 4.0.0 to 4.0.1
+
+## v0.16.0 (Released 2021-01-22)
 
 ADDITIONS
 
 - api,client: add SdnType and SsiType models
+- docs: include a page for prometheus metrics
 - server: Add `last_data_refresh_failure{source="SDNs"}` Prometheus metric
+
+BUG FIXES
+
+- build: fixup OpenShift image, rely on glibc
+
+BUILD
+
+- chore(deps): update mui monorepo to v4.11.2
+- fix(deps): pin dependency react-scripts to 4.0.0
 
 ## v0.15.3 (Released 2020-10-28)
 

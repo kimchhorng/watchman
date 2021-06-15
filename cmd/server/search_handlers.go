@@ -62,11 +62,11 @@ func readAddressSearchRequest(u *url.URL) addressSearchRequest {
 func search(logger log.Logger, searcher *searcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w = wrapResponseWriter(logger, w, r)
-		requestID, userID := moovhttp.GetRequestID(r), moovhttp.GetUserID(r)
+		requestID := moovhttp.GetRequestID(r)
 
 		// Search over all fields
 		if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
-			logger.Log("search", fmt.Sprintf("searching all names and address for %s", q), "requestID", requestID, "userID", userID)
+			logger.Log("search", fmt.Sprintf("searching all names and address for %s", q), "requestID", requestID)
 			searchViaQ(logger, searcher, q)(w, r)
 			return
 		}
@@ -81,26 +81,26 @@ func search(logger log.Logger, searcher *searcher) http.HandlerFunc {
 		// Search by Name
 		if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
 			if req := readAddressSearchRequest(r.URL); !req.empty() {
-				logger.Log("search", fmt.Sprintf("searching SDN names='%s' and addresses", name), "requestID", requestID, "userID", userID)
+				logger.Log("search", fmt.Sprintf("searching SDN names='%s' and addresses", name), "requestID", requestID)
 				searchViaAddressAndName(logger, searcher, name, req)(w, r)
 				return
 			}
 
-			logger.Log("search", fmt.Sprintf("searching SDN names for %s", name), "requestID", requestID, "userID", userID)
+			logger.Log("search", fmt.Sprintf("searching SDN names for %s", name), "requestID", requestID)
 			searchByName(logger, searcher, name)(w, r)
 			return
 		}
 
 		// Search by Alt Name
 		if alt := strings.TrimSpace(r.URL.Query().Get("altName")); alt != "" {
-			logger.Log("search", fmt.Sprintf("searching SDN alt names for %s", alt), "requestID", requestID, "userID", userID)
+			logger.Log("search", fmt.Sprintf("searching SDN alt names for %s", alt), "requestID", requestID)
 			searchByAltName(logger, searcher, alt)(w, r)
 			return
 		}
 
 		// Search Addresses
 		if req := readAddressSearchRequest(r.URL); !req.empty() {
-			logger.Log("search", fmt.Sprintf("searching address for %#v", req), "requestID", requestID, "userID", userID)
+			logger.Log("search", fmt.Sprintf("searching address for %#v", req), "requestID", requestID)
 			searchByAddress(logger, searcher, req)(w, r)
 			return
 		}
@@ -112,7 +112,7 @@ func search(logger log.Logger, searcher *searcher) http.HandlerFunc {
 
 type searchResponse struct {
 	// OFAC
-	SDNs              []SDN     `json:"SDNs"`
+	SDNs              []*SDN    `json:"SDNs"`
 	AltNames          []Alt     `json:"altNames"`
 	Addresses         []Address `json:"addresses"`
 	SectoralSanctions []SSI     `json:"sectoralSanctions"`
@@ -157,6 +157,7 @@ func searchByAddress(logger log.Logger, searcher *searcher, req addressSearchReq
 			RefreshedAt: searcher.lastRefreshedAt,
 		}
 		limit := extractSearchLimit(r)
+		minMatch := extractSearchMinMatch(r)
 
 		// Perform our ranking across all accumulated compare functions
 		//
@@ -165,7 +166,7 @@ func searchByAddress(logger log.Logger, searcher *searcher, req addressSearchReq
 		compares := buildAddressCompares(req)
 
 		filtered := searcher.FilterCountries(req.Country)
-		resp.Addresses = TopAddressesFn(limit, filtered, multiAddressCompare(compares...))
+		resp.Addresses = TopAddressesFn(limit, minMatch, filtered, multiAddressCompare(compares...))
 
 		// record Prometheus metrics
 		if len(resp.Addresses) > 0 {
@@ -188,9 +189,10 @@ func searchViaQ(logger log.Logger, searcher *searcher, name string) http.Handler
 			return
 		}
 		limit := extractSearchLimit(r)
+		minMatch := extractSearchMinMatch(r)
 
 		// Perform multiple searches over the set of SDNs
-		resp := buildFullSearchResponse(searcher, buildFilterRequest(r.URL), limit, name)
+		resp := buildFullSearchResponse(searcher, buildFilterRequest(r.URL), limit, minMatch, name)
 
 		// record Prometheus metrics
 		if len(resp.SDNs) > 0 {
@@ -207,42 +209,42 @@ func searchViaQ(logger log.Logger, searcher *searcher, name string) http.Handler
 }
 
 // searchGather performs an inmem search with *searcher and mutates *searchResponse by setting a specific field
-type searchGather func(searcher *searcher, filters filterRequest, limit int, name string, resp *searchResponse)
+type searchGather func(searcher *searcher, filters filterRequest, limit int, minMatch float64, name string, resp *searchResponse)
 
 var (
 	gatherings = []searchGather{
 		// OFAC SDN Search
-		func(s *searcher, filters filterRequest, limit int, name string, resp *searchResponse) {
+		func(s *searcher, filters filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			sdns := s.FindSDNsByRemarksID(limit, name)
 			if len(sdns) == 0 {
-				sdns = s.TopSDNs(limit, name)
+				sdns = s.TopSDNs(limit, minMatch, name, keepSDN(filters))
 			}
 			resp.SDNs = filterSDNs(sdns, filters)
 		},
 		// OFAC SDN Alt Names
-		func(s *searcher, _ filterRequest, limit int, name string, resp *searchResponse) {
-			resp.AltNames = s.TopAltNames(limit, name)
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.AltNames = s.TopAltNames(limit, minMatch, name)
 		},
 		// OFAC Addresses
-		func(s *searcher, _ filterRequest, limit int, name string, resp *searchResponse) {
-			resp.Addresses = s.TopAddresses(limit, name)
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.Addresses = s.TopAddresses(limit, minMatch, name)
 		},
 		// OFAC Sectoral Sanctions Identifications
-		func(s *searcher, _ filterRequest, limit int, name string, resp *searchResponse) {
-			resp.SectoralSanctions = s.TopSSIs(limit, name)
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.SectoralSanctions = s.TopSSIs(limit, minMatch, name)
 		},
 		// BIS Denied Persons
-		func(s *searcher, _ filterRequest, limit int, name string, resp *searchResponse) {
-			resp.DeniedPersons = s.TopDPs(limit, name)
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.DeniedPersons = s.TopDPs(limit, minMatch, name)
 		},
 		// BIS Entity List
-		func(s *searcher, _ filterRequest, limit int, name string, resp *searchResponse) {
-			resp.BISEntities = s.TopBISEntities(limit, name)
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.BISEntities = s.TopBISEntities(limit, minMatch, name)
 		},
 	}
 )
 
-func buildFullSearchResponse(searcher *searcher, filters filterRequest, limit int, name string) *searchResponse {
+func buildFullSearchResponse(searcher *searcher, filters filterRequest, limit int, minMatch float64, name string) *searchResponse {
 	resp := searchResponse{
 		RefreshedAt: searcher.lastRefreshedAt,
 	}
@@ -250,7 +252,7 @@ func buildFullSearchResponse(searcher *searcher, filters filterRequest, limit in
 	wg.Add(len(gatherings))
 	for i := range gatherings {
 		go func(i int) {
-			gatherings[i](searcher, filters, limit, name, &resp)
+			gatherings[i](searcher, filters, limit, minMatch, name, &resp)
 			wg.Done()
 		}(i)
 	}
@@ -266,17 +268,17 @@ func searchViaAddressAndName(logger log.Logger, searcher *searcher, name string,
 			return
 		}
 
-		limit := extractSearchLimit(r)
+		limit, minMatch := extractSearchLimit(r), extractSearchMinMatch(r)
 
 		resp := &searchResponse{
 			RefreshedAt: searcher.lastRefreshedAt,
 		}
 
-		resp.SDNs = filterSDNs(searcher.TopSDNs(limit, name), buildFilterRequest(r.URL))
+		resp.SDNs = searcher.TopSDNs(limit, minMatch, name, keepSDN(buildFilterRequest(r.URL)))
 
 		compares := buildAddressCompares(req)
 		filtered := searcher.FilterCountries(req.Country)
-		resp.Addresses = TopAddressesFn(limit, filtered, multiAddressCompare(compares...))
+		resp.Addresses = TopAddressesFn(limit, minMatch, filtered, multiAddressCompare(compares...))
 
 		// record Prometheus metrics
 		if len(resp.SDNs) > 0 && len(resp.Addresses) > 0 {
@@ -299,6 +301,7 @@ func searchByRemarksID(logger log.Logger, searcher *searcher, id string) http.Ha
 		}
 
 		limit := extractSearchLimit(r)
+
 		sdns := searcher.FindSDNsByRemarksID(limit, id)
 		sdns = filterSDNs(sdns, buildFilterRequest(r.URL))
 
@@ -327,10 +330,10 @@ func searchByName(logger log.Logger, searcher *searcher, nameSlug string) http.H
 		}
 
 		limit := extractSearchLimit(r)
+		minMatch := extractSearchMinMatch(r)
 
 		// Grab the SDN's and then filter any out based on query params
-		sdns := searcher.TopSDNs(limit, nameSlug)
-		sdns = filterSDNs(sdns, buildFilterRequest(r.URL))
+		sdns := searcher.TopSDNs(limit, minMatch, nameSlug, keepSDN(buildFilterRequest(r.URL)))
 
 		// record Prometheus metrics
 		if len(sdns) > 0 {
@@ -344,11 +347,11 @@ func searchByName(logger log.Logger, searcher *searcher, nameSlug string) http.H
 		json.NewEncoder(w).Encode(&searchResponse{
 			// OFAC
 			SDNs:              sdns,
-			AltNames:          searcher.TopAltNames(limit, nameSlug),
-			SectoralSanctions: searcher.TopSSIs(limit, nameSlug),
+			AltNames:          searcher.TopAltNames(limit, minMatch, nameSlug),
+			SectoralSanctions: searcher.TopSSIs(limit, minMatch, nameSlug),
 			// BIS
-			DeniedPersons: searcher.TopDPs(limit, nameSlug),
-			BISEntities:   searcher.TopBISEntities(limit, nameSlug),
+			DeniedPersons: searcher.TopDPs(limit, minMatch, nameSlug),
+			BISEntities:   searcher.TopBISEntities(limit, minMatch, nameSlug),
 			// Metadata
 			RefreshedAt: searcher.lastRefreshedAt,
 		})
@@ -363,7 +366,9 @@ func searchByAltName(logger log.Logger, searcher *searcher, altSlug string) http
 			return
 		}
 
-		alts := searcher.TopAltNames(extractSearchLimit(r), altSlug)
+		limit := extractSearchLimit(r)
+		minMatch := extractSearchMinMatch(r)
+		alts := searcher.TopAltNames(limit, minMatch, altSlug)
 
 		// record Prometheus metrics
 		if len(alts) > 0 {

@@ -32,26 +32,14 @@ func TestSearcher__refreshInterval(t *testing.T) {
 	}
 
 	// cover another branch
-	s := &searcher{
-		logger: log.NewNopLogger(),
-		pipe:   noLogPipeliner,
-	}
+	s := newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 	s.periodicDataRefresh(0*time.Second, nil, nil)
 }
 
 func TestSearcher__refreshData(t *testing.T) {
-	if testing.Short() {
-		return
-	}
+	s := createTestSearcher(t) // TODO(adam): initial setup
+	stats := testSearcherStats
 
-	s := &searcher{
-		logger: log.NewNopLogger(),
-		pipe:   noLogPipeliner,
-	}
-	stats, err := s.refreshData("")
-	if err != nil {
-		t.Fatal(err)
-	}
 	if len(s.Addresses) == 0 || stats.Addresses == 0 {
 		t.Errorf("empty Addresses=%d stats.Addresses=%d", len(s.Addresses), stats.Addresses)
 	}
@@ -134,7 +122,7 @@ func TestDownload_route(t *testing.T) {
 		repo.recordStats(&downloadStats{SDNs: 1, Alts: 421, Addresses: 1511, DeniedPersons: 731, SectoralSanctions: 289, BISEntities: 189})
 
 		router := mux.NewRouter()
-		addDownloadRoutes(nil, router, repo)
+		addDownloadRoutes(log.NewNopLogger(), router, repo)
 		router.ServeHTTP(w, req)
 		w.Flush()
 

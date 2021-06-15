@@ -54,7 +54,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -102,7 +101,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -150,7 +148,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -198,7 +195,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -242,7 +238,6 @@ Optional parameters are passed through a pointer to a GetLatestDownloadsOpts str
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
  **limit** | **optional.Int32**| Maximum number of downloads to return sorted by their timestamp in decending order. | 
 
 ### Return type
@@ -289,7 +284,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -335,7 +329,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -381,7 +374,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -425,7 +417,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -469,7 +460,6 @@ Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -590,7 +580,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -638,7 +627,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -684,7 +672,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -732,7 +719,6 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
 
 ### Return type
 
@@ -774,7 +760,6 @@ Optional parameters are passed through a pointer to a SearchOpts struct
 Name | Type | Description  | Notes
 ------------- | ------------- | ------------- | -------------
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
  **q** | **optional.String**| Search across Name, Alt Names, and SDN Address fields for all available sanctions lists. Entries may be returned in all response sub-objects. | 
  **name** | **optional.String**| Name which could correspond to an entry on the SDN, Denied Persons, Sectoral Sanctions Identifications, or BIS Entity List sanctions lists. Alt names are also searched. | 
  **address** | **optional.String**| Phsical address which could correspond to a human on the SDN list. Only Address results will be returned. | 
@@ -785,6 +770,7 @@ Name | Type | Description  | Notes
  **country** | **optional.String**| Country name as desginated by SDN guidelines. Only Address results will be returned. | 
  **altName** | **optional.String**| Alternate name which could correspond to a human on the SDN list. Only Alt name results will be returned. | 
  **id** | **optional.String**| ID value often found in remarks property of an SDN. Takes the form of &#39;No. NNNNN&#39; as an alphanumeric value. | 
+ **minMatch** | **optional.Float32**| Match percentage that search query must obtain for results to be returned. | 
  **limit** | **optional.Int32**| Maximum results returned by a search. Results are sorted by their match percentage in decending order. | 
  **sdnType** | **optional.String**| Optional filter to only return SDNs whose type case-insensitively matches. | 
  **program** | **optional.String**| Optional filter to only return SDNs whose program case-insensitively matches | 
@@ -835,7 +821,7 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
+ **xUserID** | **optional.String**| User ID used to perform this search | 
 
 ### Return type
 
@@ -883,7 +869,7 @@ Name | Type | Description  | Notes
 
 
  **xRequestID** | **optional.String**| Optional Request ID allows application developer to trace requests through the systems logs | 
- **xUserID** | **optional.String**| Optional User ID used to perform this search | 
+ **xUserID** | **optional.String**| User ID used to perform this search | 
 
 ### Return type
 
