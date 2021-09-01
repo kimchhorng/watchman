@@ -1,3 +1,59 @@
+## v0.20.0 (Released 2021-08-27)
+
+Watchman v0.20.0 improves scoring by reducing false positives. There are two changes implemented in this
+release to achive better scoring. First is to keep a more accurate list of scores for our query, which means
+longer queries will return more accurate results than before. Second is that we will always score at least two
+words, which helps to reduce false positives from "first last" queries.
+
+IMPROVEMENTS
+
+- docs/intro: mention jaro-winkler is used and why
+- search: properly keep top N word scores, match at least two words
+
+BUG FIXES
+
+- ofac: skip error with shared initial directory
+
+BUILD
+
+- build: use debian stable's slim image
+- fix: Dockerfile to reduce vulnerabilities
+- meta: fixup from gosec linters
+
+## v0.19.2 (Released 2021-07-21)
+
+IMPROVEMENTS
+
+- cmd/server: add `match` score to OpenAPI search entities
+- cmd/server: document CSL separation in struct
+
+BUILD
+
+- chore(deps): update dependency @material-ui/core to v4.12.2
+
+## v0.19.1 (Released 2021-07-16)
+
+BUG FIXES
+
+- cmd/server: nil check on setting updated records
+- download: fixup reading of initial dir rather than downloading
+- dpl: find file rather than assume its index
+
+IMPROVEMENTS
+
+- cmd/server: misc improvements from linters
+
+BUILD
+
+- build(deps): bump addressable from 2.7.0 to 2.8.0 in /docs
+- chore(deps): update dependency @material-ui/core to v4.12.1
+- cmd/server: add benchmark for ?minMatch=0.50
+- cmd/server: add benchmarks for various SDN search queries
+- fix(deps): update react monorepo to v17
+- fix: Dockerfile to reduce vulnerabilities
+- fix: upgrade react-scripts from 4.0.1 to 4.0.3
+- test: add static set of files for benchmarks
+
 ## v0.19.0 (Released 2021-06-10)
 
 This release improves search results by filtering as part of scoring instead of after the fact.

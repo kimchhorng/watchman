@@ -11,9 +11,8 @@ import (
 )
 
 func BenchmarkSearch__Addresses(b *testing.B) {
-	b.StopTimer()
 	searcher := createBenchmarkSearcher(b)
-	b.StartTimer()
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		searcher.TopAddresses(10, 0.0, randomName())
@@ -21,9 +20,8 @@ func BenchmarkSearch__Addresses(b *testing.B) {
 }
 
 func BenchmarkSearch__BISEntities(b *testing.B) {
-	b.StopTimer()
 	searcher := createBenchmarkSearcher(b)
-	b.StartTimer()
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		searcher.TopBISEntities(10, 0.0, randomName())
@@ -31,30 +29,74 @@ func BenchmarkSearch__BISEntities(b *testing.B) {
 }
 
 func BenchmarkSearch__DPs(b *testing.B) {
-	b.StopTimer()
 	searcher := createBenchmarkSearcher(b)
-	b.StartTimer()
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		searcher.TopDPs(10, 0.0, randomName())
 	}
 }
 
-func BenchmarkSearch__SDNs(b *testing.B) {
-	b.StopTimer()
+func BenchmarkSearch__SDNsBasic(b *testing.B) {
 	searcher := createBenchmarkSearcher(b)
 	keeper := keepSDN(filterRequest{})
-	b.StartTimer()
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		searcher.TopSDNs(10, 0.0, randomName(), keeper)
 	}
 }
 
-func BenchmarkSearch__SSIs(b *testing.B) {
-	b.StopTimer()
+func BenchmarkSearch__SDNsMinMatch50(b *testing.B) {
+	minMatch := 0.50
 	searcher := createBenchmarkSearcher(b)
-	b.StartTimer()
+	keeper := keepSDN(filterRequest{})
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		searcher.TopSDNs(10, minMatch, randomName(), keeper)
+	}
+}
+
+func BenchmarkSearch__SDNsMinMatch95(b *testing.B) {
+	minMatch := 0.95
+	searcher := createBenchmarkSearcher(b)
+	keeper := keepSDN(filterRequest{})
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		searcher.TopSDNs(10, minMatch, randomName(), keeper)
+	}
+}
+
+func BenchmarkSearch__SDNsEntity(b *testing.B) {
+	searcher := createBenchmarkSearcher(b)
+	keeper := keepSDN(filterRequest{
+		sdnType: "entity",
+	})
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		searcher.TopSDNs(10, 0.0, randomName(), keeper)
+	}
+}
+
+func BenchmarkSearch__SDNsComplex(b *testing.B) {
+	minMatch := 0.95
+	searcher := createBenchmarkSearcher(b)
+	keeper := keepSDN(filterRequest{
+		sdnType: "entity",
+	})
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		searcher.TopSDNs(10, minMatch, randomName(), keeper)
+	}
+}
+
+func BenchmarkSearch__SSIs(b *testing.B) {
+	searcher := createBenchmarkSearcher(b)
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		searcher.TopSSIs(10, 0.0, randomName())

@@ -117,20 +117,24 @@ func ofacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 
 	for i := range files {
 		if i == 0 {
-			res, err = ofac.Read(files[i])
+			rr, err := ofac.Read(files[i])
 			if err != nil {
 				return nil, fmt.Errorf("read: %v", err)
+			}
+			if rr != nil {
+				res = rr
 			}
 		} else {
 			rr, err := ofac.Read(files[i])
 			if err != nil {
 				return nil, fmt.Errorf("read and replace: %v", err)
 			}
-
-			res.Addresses = append(res.Addresses, rr.Addresses...)
-			res.AlternateIdentities = append(res.AlternateIdentities, rr.AlternateIdentities...)
-			res.SDNs = append(res.SDNs, rr.SDNs...)
-			res.SDNComments = append(res.SDNComments, rr.SDNComments...)
+			if rr != nil {
+				res.Addresses = append(res.Addresses, rr.Addresses...)
+				res.AlternateIdentities = append(res.AlternateIdentities, rr.AlternateIdentities...)
+				res.SDNs = append(res.SDNs, rr.SDNs...)
+				res.SDNComments = append(res.SDNComments, rr.SDNComments...)
+			}
 		}
 	}
 	return res, err

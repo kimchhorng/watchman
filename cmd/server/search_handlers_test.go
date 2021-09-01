@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/gorilla/mux"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSearch__Address(t *testing.T) {
@@ -91,7 +93,7 @@ func TestSearch__AddressMulti(t *testing.T) {
 		t.Errorf("bogus status code: %d", w.Code)
 	}
 
-	if v := w.Body.String(); !strings.Contains(v, `"match":0.925`) {
+	if v := w.Body.String(); !strings.Contains(v, `"match":0.8847`) {
 		t.Errorf("%#v", v)
 	}
 }
@@ -109,7 +111,7 @@ func TestSearch__AddressProvidence(t *testing.T) {
 		t.Errorf("bogus status code: %d", w.Code)
 	}
 
-	if v := w.Body.String(); !strings.Contains(v, `"match":0.950`) {
+	if v := w.Body.String(); !strings.Contains(v, `"match":0.923`) {
 		t.Errorf("%#v", v)
 	}
 }
@@ -127,7 +129,7 @@ func TestSearch__AddressCity(t *testing.T) {
 		t.Errorf("bogus status code: %d", w.Code)
 	}
 
-	if v := w.Body.String(); !strings.Contains(v, `"match":0.950`) {
+	if v := w.Body.String(); !strings.Contains(v, `"match":0.923`) {
 		t.Errorf("%#v", v)
 	}
 }
@@ -145,7 +147,7 @@ func TestSearch__AddressState(t *testing.T) {
 		t.Errorf("bogus status code: %d", w.Code)
 	}
 
-	if v := w.Body.String(); !strings.Contains(v, `"match":0.950`) {
+	if v := w.Body.String(); !strings.Contains(v, `"match":0.923`) {
 		t.Errorf("%#v", v)
 	}
 }
@@ -355,7 +357,7 @@ func TestSearch__AltName(t *testing.T) {
 		t.Errorf("bogus status code: %d", w.Code)
 	}
 
-	if v := w.Body.String(); !strings.Contains(v, `"match":1`) {
+	if v := w.Body.String(); !strings.Contains(v, `"match":0.666`) {
 		t.Error(v)
 	}
 
@@ -396,4 +398,25 @@ func TestSearch__ID(t *testing.T) {
 	if wrapper.SDNs[0].EntityID != "22790" {
 		t.Errorf("%#v", wrapper.SDNs[0])
 	}
+}
+
+func TestSearch__EscapeQuery(t *testing.T) {
+	req, err := http.NewRequest("GET", "/search?name=John%2BDoe", nil)
+	require.NoError(t, err)
+
+	name := req.URL.Query().Get("name")
+	require.Equal(t, "John+Doe", name)
+
+	name, _ = url.QueryUnescape(name)
+	require.Equal(t, "John Doe", name)
+
+	req, err = http.NewRequest("GET", "/search?name=John+Doe", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	name = req.URL.Query().Get("name")
+	require.Equal(t, "John Doe", name)
+
+	name, _ = url.QueryUnescape(name)
+	require.Equal(t, "John Doe", name)
 }

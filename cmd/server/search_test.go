@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -194,7 +195,7 @@ func createTestSearcher(t *testing.T) *searcher {
 
 func createBenchmarkSearcher(b *testing.B) *searcher {
 	testSearcherOnce.Do(func() {
-		stats, err := testLiveSearcher.refreshData("")
+		stats, err := testLiveSearcher.refreshData(filepath.Join("..", "..", "test", "testdata", "bench"))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -225,19 +226,30 @@ func TestJaroWinkler(t *testing.T) {
 		{"kala limited", "kalamity linden", 0.795},
 		// examples used in demos / commonly
 		{"nicolas", "nicolas", 1.0},
-		{"nicolas moros maduro", "nicolas maduro", 1.0},
+		{"nicolas moros maduro", "nicolas maduro", 0.91},
 		{"nicolas maduro", "nicolas moros maduro", 1.0},
 		// example cases
+		{"nicolas maduro", "nicolás maduro", 0.961},
+		{"nicolas maduro", precompute("nicolás maduro"), 1.0},
 		{"nicolas maduro", "nicolas maduro", 1.0},
 		{"maduro, nicolas", "maduro, nicolas", 1.0},
 		{"maduro moros, nicolas", "maduro moros, nicolas", 1.0},
-		{"maduro moros, nicolas", "nicolas maduro", 1.0},
-		{"nicolas maduro moros", "nicolás maduro", 0.961},
-		{"nicolas, maduro moros", "nicolas maduro", 0.988},
-		{"nicolas, maduro moros", "nicolás maduro", 0.950},
+		{"maduro moros, nicolas", "nicolas maduro", 0.889},
+		{"nicolas maduro moros", "maduro", 0.722},
+		{"nicolas maduro moros", "nicolás maduro", 0.884},
+		{"nicolas, maduro moros", "maduro", 0.720},
+		{"nicolas, maduro moros", "nicolas maduro", 0.902},
+		{"nicolas, maduro moros", "nicolás", 0.627},
+		{"nicolas, maduro moros", "maduro", 0.720},
+		{"nicolas, maduro moros", "nicolás maduro", 0.877},
+		{"africada financial services bureau change", "skylight", 0.352},
+		{"africada financial services bureau change", "skylight financial inc", 0.72},
+		{"africada financial services bureau change", "skylight services inc", 0.806},
+		{"africada financial services bureau change", "skylight financial services", 0.887},
+		{"africada financial services bureau change", "skylight financial services inc", 0.79},
 		// stopwords
-		{"i c sogo kenkyusho", precompute("A.I.C. SOGO KENKYUSHO"), 1.0},
-		{precompute("A.I.C. SOGO KENKYUSHO"), "sogo kenkyusho", 1.0},
+		{"i c sogo kenkyusho", precompute("A.I.C. SOGO KENKYUSHO"), 0.667},
+		{precompute("A.I.C. SOGO KENKYUSHO"), "sogo kenkyusho", 0.667},
 	}
 	for i := range cases {
 		v := cases[i]
@@ -277,8 +289,8 @@ func TestSearch_liveData(t *testing.T) {
 		name  string
 		match float64 // top match %
 	}{
-		{"Nicolas MADURO", 1.0},
-		{"nicolas maduro", 1.0},
+		{"Nicolas MADURO", 0.932},
+		{"nicolas maduro", 0.932},
 	}
 	keeper := keepSDN(filterRequest{})
 	for i := range cases {
