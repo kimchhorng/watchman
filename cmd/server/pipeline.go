@@ -25,6 +25,7 @@ type Name struct {
 	Processed string
 
 	// optional metadata of where a name came from
+	alt   *ofac.AlternateIdentity
 	sdn   *ofac.SDN
 	ssi   *csl.SSI
 	dp    *dpl.DPL
@@ -38,6 +39,14 @@ func sdnName(sdn *ofac.SDN, addrs []*ofac.Address) *Name {
 		Processed: sdn.SDNName,
 		sdn:       sdn,
 		addrs:     addrs,
+	}
+}
+
+func altName(alt *ofac.AlternateIdentity) *Name {
+	return &Name{
+		Original:  alt.AlternateName,
+		Processed: alt.AlternateName,
+		alt:       alt,
 	}
 }
 

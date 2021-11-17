@@ -6,6 +6,7 @@ package ofac
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -77,11 +78,18 @@ func csvAddressFile(path string) (*Results, error) {
 	reader := csv.NewReader(f)
 	for {
 		record, err := reader.Read()
-		if err != nil && err == csv.ErrFieldCount {
-			continue
-		}
-		if err == io.EOF { // TODO(Adam): add max line count break here also
-			break
+		if err != nil {
+			// reached the last line
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			// malformed row
+			if errors.Is(err, csv.ErrFieldCount) ||
+				errors.Is(err, csv.ErrBareQuote) ||
+				errors.Is(err, csv.ErrQuote) {
+				continue
+			}
+			return nil, err
 		}
 		if len(record) != 6 {
 			continue
@@ -114,11 +122,18 @@ func csvAlternateIdentityFile(path string) (*Results, error) {
 	reader := csv.NewReader(f)
 	for {
 		record, err := reader.Read()
-		if err != nil && err == csv.ErrFieldCount {
-			continue
-		}
-		if err == io.EOF { // TODO(adam)
-			break
+		if err != nil {
+			// reached the last line
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			// malformed row
+			if errors.Is(err, csv.ErrFieldCount) ||
+				errors.Is(err, csv.ErrBareQuote) ||
+				errors.Is(err, csv.ErrQuote) {
+				continue
+			}
+			return nil, err
 		}
 		if len(record) != 5 {
 			continue
@@ -149,11 +164,18 @@ func csvSDNFile(path string) (*Results, error) {
 	reader := csv.NewReader(f)
 	for {
 		record, err := reader.Read()
-		if err != nil && err == csv.ErrFieldCount {
-			continue
-		}
-		if err == io.EOF { // TODO(Adam): add max line count break here also
-			break
+		if err != nil {
+			// reached the last line
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			// malformed row
+			if errors.Is(err, csv.ErrFieldCount) ||
+				errors.Is(err, csv.ErrBareQuote) ||
+				errors.Is(err, csv.ErrQuote) {
+				continue
+			}
+			return nil, err
 		}
 		if len(record) != 12 {
 			continue
@@ -188,21 +210,31 @@ func csvSDNCommentsFile(path string) (*Results, error) {
 	// Read File into a Variable
 	r := csv.NewReader(f)
 	r.LazyQuotes = true
-	lines, err := r.ReadAll()
-	if err != nil {
-		return nil, err
-	}
 
 	// Loop through lines & turn into object
 	var out []*SDNComments
-	for _, csvLine := range lines {
-		if len(csvLine) != 2 {
+	for {
+		line, err := r.Read()
+		if err != nil {
+			// reached the last line
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			// malformed row
+			if errors.Is(err, csv.ErrFieldCount) ||
+				errors.Is(err, csv.ErrBareQuote) ||
+				errors.Is(err, csv.ErrQuote) {
+				continue
+			}
+			return nil, err
+		}
+		if len(line) != 2 {
 			continue
 		}
-		csvLine := replaceNull(csvLine)
+		line = replaceNull(line)
 		out = append(out, &SDNComments{
-			EntityID:        csvLine[0],
-			RemarksExtended: csvLine[1],
+			EntityID:        line[0],
+			RemarksExtended: line[1],
 		})
 	}
 	return &Results{SDNComments: out}, nil

@@ -1,3 +1,35 @@
+## v0.21.3 (Released 2021-11-10)
+
+IMPROVEMENTS
+
+- fix: skip malformed rows in input files (#379)
+
+## v0.21.2 (Released 2021-11-09)
+
+IMPROVEMENTS
+
+- build: enable gosec and coverage linter
+- fix: DPL records could have invalid characters, add length guards
+- fix: ignore misspell checks on valid test data
+- fix: ofac SDN comments file has invalid characters / column counts
+
+## v0.21.1 (Released 2021-10-04)
+
+Release v0.21.1 applies bugfix to pre-computation steps to SDN alternate names.
+
+BUG FIXES
+
+- search: bugfix for pipeline steps to SDN alt names (#376)
+
+## v0.21.0 (Released 2021-09-29)
+
+Release v0.21.0 applies pre-computation steps to SDN alternate names which was previously missing. This impacts
+match performance for only those results.
+
+BUG FIXES
+
+- search: apply pipline steps to SDN alt names (#375)
+
 ## v0.20.0 (Released 2021-08-27)
 
 Watchman v0.20.0 improves scoring by reducing false positives. There are two changes implemented in this

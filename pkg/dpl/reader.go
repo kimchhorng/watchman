@@ -6,10 +6,12 @@ package dpl
 
 import (
 	"encoding/csv"
+	"errors"
+	"io"
 	"os"
 )
 
-// Reader parses DPL records from a TXT file and populates the associated arrays.
+// Read parses DPL records from a TXT file and populates the associated arrays.
 //
 // For more details on the raw DPL files see https://moov-io.github.io/watchman/file-structure.html
 func Read(path string) ([]*DPL, error) {
@@ -24,31 +26,43 @@ func Read(path string) ([]*DPL, error) {
 	reader := csv.NewReader(f)
 	reader.Comma = '\t'
 
-	// Read File into a Variable
-	lines, err := reader.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-
+	// Loop through all lines we can
 	var out []*DPL
-	for _, txtLine := range lines {
-		if txtLine[1] == "Street_Address" {
-			continue // skip the headers
+	for {
+		line, err := reader.Read()
+		if err != nil {
+			if err != nil {
+				// reached the last line
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				// malformed row
+				if errors.Is(err, csv.ErrFieldCount) ||
+					errors.Is(err, csv.ErrBareQuote) ||
+					errors.Is(err, csv.ErrQuote) {
+					continue
+				}
+				return nil, err
+			}
+		}
+
+		if len(line) < 12 || (len(line) >= 2 && line[1] == "Street_Address") {
+			continue // skip malformed headers
 		}
 
 		deniedPerson := &DPL{
-			Name:           txtLine[0],
-			StreetAddress:  txtLine[1],
-			City:           txtLine[2],
-			State:          txtLine[3],
-			Country:        txtLine[4],
-			PostalCode:     txtLine[5],
-			EffectiveDate:  txtLine[6],
-			ExpirationDate: txtLine[7],
-			StandardOrder:  txtLine[8],
-			LastUpdate:     txtLine[9],
-			Action:         txtLine[10],
-			FRCitation:     txtLine[11],
+			Name:           line[0],
+			StreetAddress:  line[1],
+			City:           line[2],
+			State:          line[3],
+			Country:        line[4],
+			PostalCode:     line[5],
+			EffectiveDate:  line[6],
+			ExpirationDate: line[7],
+			StandardOrder:  line[8],
+			LastUpdate:     line[9],
+			Action:         line[10],
+			FRCitation:     line[11],
 		}
 		out = append(out, deniedPerson)
 	}
