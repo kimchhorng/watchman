@@ -7,7 +7,7 @@ build: build-server build-batchsearch build-watchmantest build-examples
 ifeq ($(OS),Windows_NT)
 	@echo "Skipping webui build on Windows."
 else
-	cd webui/ && npm install && npm run build && cd ../
+	cd webui/ && npm install --legacy-peer-deps && npm run build && cd ../
 endif
 
 build-server:
@@ -31,7 +31,7 @@ ifeq ($(OS),Windows_NT)
 else
 	@wget -O lint-project.sh https://raw.githubusercontent.com/moov-io/infra/master/go/lint-project.sh
 	@chmod +x ./lint-project.sh
-	COVER_THRESHOLD=75.0 GOLANGCI_LINTERS=gosec ./lint-project.sh
+	COVER_THRESHOLD=70.0 DISABLE_GITLEAKS=true SET_GOLANGCI_LINTERS=govet,gosec ./lint-project.sh
 endif
 
 .PHONY: admin
@@ -40,7 +40,7 @@ admin:
 	docker run --rm \
 		-u $(USERID):$(GROUPID) \
 		-v ${PWD}:/local openapitools/openapi-generator-cli:v4.3.1 batch -- /local/.openapi-generator/admin-generator-config.yml
-	rm -f ./admin/go.mod ./admin/go.sum
+	rm -f ./admin/go.mod ./admin/go.sum ./admin/.travis.yml
 	gofmt -w ./admin/
 	go build github.com/moov-io/watchman/admin
 
@@ -50,7 +50,7 @@ client:
 	docker run --rm \
 		-u $(USERID):$(GROUPID) \
 		-v ${PWD}:/local openapitools/openapi-generator-cli:v4.3.1 batch -- /local/.openapi-generator/client-generator-config.yml
-	rm -f ./client/go.mod ./client/go.sum
+	rm -f ./client/go.mod ./client/go.sum ./client/.travis.yml
 	gofmt -w ./client/
 	go build github.com/moov-io/watchman/client
 
@@ -114,8 +114,7 @@ cover-web:
 	go tool cover -html=cover.out
 
 clean-integration:
-	docker-compose kill
-	docker-compose rm -v -f
+	docker-compose kill && docker-compose rm -v -f
 
 test-integration: clean-integration
 	docker-compose up -d

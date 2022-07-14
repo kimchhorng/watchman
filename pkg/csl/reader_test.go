@@ -1,10 +1,12 @@
 package csl
 
 import (
+	"compress/gzip"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +14,7 @@ import (
 )
 
 func TestRead(t *testing.T) {
-	csl, err := Read(filepath.Join("..", "..", "test", "testdata", "csl.csv"))
+	csl, err := ReadFile(filepath.Join("..", "..", "test", "testdata", "csl.csv"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +29,23 @@ func TestRead(t *testing.T) {
 	}
 }
 
+func TestRead__Large(t *testing.T) {
+	fd, err := os.Open(filepath.Join("testdata", "consolidated.csv.gz"))
+	require.NoError(t, err)
+
+	reader, err := gzip.NewReader(fd)
+	require.NoError(t, err)
+
+	report, err := Parse(reader)
+	require.NoError(t, err)
+	require.NotNil(t, report)
+
+	// Ensure we read each row as expected
+	require.Len(t, report.ELs, 2001)
+	require.Len(t, report.MEUs, 71)
+	require.Len(t, report.SSIs, 290)
+}
+
 func TestRead_missingRow(t *testing.T) {
 	fd, err := ioutil.TempFile("", "csl-missing.csv")
 	require.NoError(t, err)
@@ -35,15 +54,16 @@ func TestRead_missingRow(t *testing.T) {
 	_, err = fd.Write([]byte(`  \n invalid  \n  \n`))
 	require.NoError(t, err)
 
-	resp, err := Read(fd.Name())
+	resp, err := ReadFile(fd.Name())
 	require.NoError(t, err)
 
-	require.Len(t, resp.SSIs, 0)
 	require.Len(t, resp.ELs, 0)
+	require.Len(t, resp.MEUs, 0)
+	require.Len(t, resp.SSIs, 0)
 }
 
 func TestRead_invalidRow(t *testing.T) {
-	csl, err := Read(filepath.Join("..", "..", "test", "testdata", "invalidFiles", "csl.csv"))
+	csl, err := ReadFile(filepath.Join("..", "..", "test", "testdata", "invalidFiles", "csl.csv"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +76,57 @@ func TestRead_invalidRow(t *testing.T) {
 	if len(csl.ELs) != 1 {
 		t.Errorf("len(ELs)=%d", len(csl.ELs))
 	}
+}
+
+func Test_unmarshalEL(t *testing.T) {
+	record := []string{"Entity List (EL) - Bureau of Industry and Security", "", "", "", "GBNTT", "", "No. 34 Mansour Street, Tehran, IR", "73 FR 54506", "2008-09-22", "", "",
+		"For all items subject to the EAR (See §744.11 of the EAR)", "Presumption of denial", "", "", "", "", "", "", "", "http://bit.ly/1L47xrV", "", "", "", "", "", "http://bit.ly/1L47xrV", ""}
+	expectedEL := &EL{
+		Name:               "GBNTT",
+		AlternateNames:     nil,
+		Addresses:          []string{"No. 34 Mansour Street, Tehran, IR"},
+		StartDate:          "2008-09-22",
+		LicenseRequirement: "For all items subject to the EAR (See §744.11 of the EAR)",
+		LicensePolicy:      "Presumption of denial",
+		FRNotice:           "73 FR 54506",
+		SourceListURL:      "http://bit.ly/1L47xrV",
+		SourceInfoURL:      "http://bit.ly/1L47xrV",
+	}
+
+	actualEL := unmarshalEL(record, 0)
+
+	if !reflect.DeepEqual(expectedEL, actualEL) {
+		t.Errorf("Expected: %#v\nFound: %#v\n", expectedEL, actualEL)
+	}
+}
+
+func Test_unmarshalMEU(t *testing.T) {
+	input := strings.NewReader(strings.TrimSpace(`
+26744194bd9b5cbec49db6ee29a4b53c697c7420,Military End User (MEU) List - Bureau of Industry and Security,,,,AECC Aviation Power Co. Ltd.,,"Xiujia Bay, Weiyong Dt, Xian, 710021, CN",85 FR 83799,2020-12-23,,,For any item subject to the EAR listed in supplement no. 2 to part 744.,The license application procedure and license review policy for entities specified in supplement no. 2 to part 744 is specified in §744.21(d) and (e).,,,,,,,,https://bit.ly/2XaGPYw,"",,,,,https://bit.ly/2XaGPYw,
+baba9becd5dd994a2f9748dd051aeb144dc5a35e,Military End User (MEU) List - Bureau of Industry and Security,,,,AECC Beijing Institute of Aeronautical. Materials,,"No. 8 Hangcai Avenue, Haidian District, Beijing, CN",85 FR 83799,2020-12-23,,,For any item subject to the EAR listed in supplement no. 2 to part 744.,The license application procedure and license review policy for entities specified in supplement no. 2 to part 744 is specified in §744.21(d) and (e).,,,,,,,,https://bit.ly/2XaGPYw,"",,,,,https://bit.ly/2XaGPYw,
+d54346ef81802673c1b1daeb2ca8bd5d13755abd,Military End User (MEU) List - Bureau of Industry and Security,,,,AECC China Gas Turbine Establishment,,"No. 1 Hangkong Road, Mianyang, Sichuan, CN",85 FR 83799,2020-12-23,,,For any item subject to the EAR listed in supplement no. 2 to part 744.,The license application procedure and license review policy for entities specified in supplement no. 2 to part 744 is specified in §744.21(d) and (e).,,,,,,,,https://bit.ly/2XaGPYw,"",,,,,https://bit.ly/2XaGPYw,`))
+
+	report, err := Parse(input)
+	require.NoError(t, err)
+	require.Len(t, report.MEUs, 3)
+
+	require.Equal(t, &MEU{
+		EntityID:  "26744194bd9b5cbec49db6ee29a4b53c697c7420",
+		Name:      "AECC Aviation Power Co. Ltd.",
+		Addresses: "Xiujia Bay, Weiyong Dt, Xian, 710021, CN",
+		FRNotice:  "85 FR 83799",
+		StartDate: "2020-12-23",
+		EndDate:   "",
+	}, report.MEUs[0])
+
+	require.Equal(t, &MEU{
+		EntityID:  "d54346ef81802673c1b1daeb2ca8bd5d13755abd",
+		Name:      "AECC China Gas Turbine Establishment",
+		Addresses: "No. 1 Hangkong Road, Mianyang, Sichuan, CN",
+		FRNotice:  "85 FR 83799",
+		StartDate: "2020-12-23",
+		EndDate:   "",
+	}, report.MEUs[2])
 }
 
 func Test_unmarshalSSI(t *testing.T) {
@@ -86,28 +157,6 @@ func Test_unmarshalSSI(t *testing.T) {
 	}
 }
 
-func Test_unmarshalEL(t *testing.T) {
-	record := []string{"Entity List (EL) - Bureau of Industry and Security", "", "", "", "GBNTT", "", "No. 34 Mansour Street, Tehran, IR", "73 FR 54506", "2008-09-22", "", "",
-		"For all items subject to the EAR (See §744.11 of the EAR)", "Presumption of denial", "", "", "", "", "", "", "", "http://bit.ly/1L47xrV", "", "", "", "", "", "http://bit.ly/1L47xrV", ""}
-	expectedEL := &EL{
-		Name:               "GBNTT",
-		AlternateNames:     nil,
-		Addresses:          []string{"No. 34 Mansour Street, Tehran, IR"},
-		StartDate:          "2008-09-22",
-		LicenseRequirement: "For all items subject to the EAR (See §744.11 of the EAR)",
-		LicensePolicy:      "Presumption of denial",
-		FRNotice:           "73 FR 54506",
-		SourceListURL:      "http://bit.ly/1L47xrV",
-		SourceInfoURL:      "http://bit.ly/1L47xrV",
-	}
-
-	actualEL := unmarshalEL(record, 0)
-
-	if !reflect.DeepEqual(expectedEL, actualEL) {
-		t.Errorf("Expected: %#v\nFound: %#v\n", expectedEL, actualEL)
-	}
-}
-
 func Test__Issue326EL(t *testing.T) {
 	fd, err := ioutil.TempFile("", "csl*.csv")
 	if err != nil {
@@ -119,7 +168,7 @@ func Test__Issue326EL(t *testing.T) {
 	}
 
 	// read the line back
-	csl, err := Read(fd.Name())
+	csl, err := ReadFile(fd.Name())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +225,7 @@ func TestCSL__UniqueIDs(t *testing.T) {
 	// CSL datafiles have added a unique identifier as the first column.
 	// We need verify the old and new file formats can be parsed.
 
-	records, err := Read(filepath.Join("..", "..", "test", "testdata", "csl-unique-ids.csv"))
+	records, err := ReadFile(filepath.Join("..", "..", "test", "testdata", "csl-unique-ids.csv"))
 	if err != nil {
 		t.Fatal(err)
 	}

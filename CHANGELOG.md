@@ -1,3 +1,54 @@
+## v0.22.0 (Unreleased)
+
+Watchman v0.22.0 has started to use Go 1.18 and its support for generic programming has helped us greatly clean up our code. We've also refreshed our [documentation website](https://moov-io.github.io/watchman/).
+
+ADDITIONS
+
+- cmd/server: add Military End User (MEU) results to search response
+- cmd/server: add an optional webhook to be notified of data downloads
+- cmd/server: read WEBHOOK_MAX_WORKERS to configure max webhook processors
+- csl: support extracting Military End User (MEU) List
+- feat: allow overrides to jaro-winkler parameters
+
+IMPROVEMENTS
+
+- cmd/server: dig into CSL entity types to precompute AlternateNames
+- cmd/server: generic function for CSL entity precompute step
+
+BUILD
+
+- build: update to Fedora 37 for OpenShift, node and react
+- build: update to Go 1.18, Node 16 and Debian versions
+- cmd/server: cleanup t.Error calls for better visibility
+- cmd/server: switch to an outside mysql container, remove dockertest
+- examples/webhook: update docker image to Go 1.18
+
+## v0.21.5 (Released 2022-04-04)
+
+BUILD
+
+- build(deps): bump lodash from 4.17.19 to 4.17.21 in /webui
+- build(deps): bump minimist from 1.2.5 to 1.2.6 in /webui
+- fix(deps): update module github.com/moov-io/base to v0.28.1
+- fix(deps): update react monorepo to v18
+
+## v0.21.4 (Released 2022-03-04)
+
+IMPROVEMENTS
+
+- all: update logging to moov-io/base using better structures and key/value pairs
+
+BUILD
+
+- Improve code coverage and fix errors form gosec
+- Upgrade to Go 1.17
+- Upgrade github.com/go-kit/kit to v0.12.0
+- Upgrade github.com/mattn/go-sqlite3 to v1.14.11
+- Upgrade github.com/moov-io/base to v0.27.5
+- Upgrade github.com/ory/dockertest/v3 to v3.8.1
+- Upgrade github.com/pariz/gountries to v0.1.5
+- Upgrade github.com/prometheus/client_golang to v1.12.1
+
 ## v0.21.3 (Released 2021-11-10)
 
 IMPROVEMENTS

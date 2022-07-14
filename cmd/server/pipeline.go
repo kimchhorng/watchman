@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -8,11 +8,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/pkg/csl"
 	"github.com/moov-io/watchman/pkg/dpl"
 	"github.com/moov-io/watchman/pkg/ofac"
-
-	"github.com/go-kit/kit/log"
 )
 
 // Name represents an individual or entity name to be processed for search.
@@ -31,6 +30,8 @@ type Name struct {
 	dp    *dpl.DPL
 	el    *csl.EL
 	addrs []*ofac.Address
+
+	altNames []string
 }
 
 func sdnName(sdn *ofac.SDN, addrs []*ofac.Address) *Name {
@@ -50,14 +51,6 @@ func altName(alt *ofac.AlternateIdentity) *Name {
 	}
 }
 
-func ssiName(ssi *csl.SSI) *Name {
-	return &Name{
-		Original:  ssi.Name,
-		Processed: ssi.Name,
-		ssi:       ssi,
-	}
-}
-
 func dpName(dp *dpl.DPL) *Name {
 	return &Name{
 		Original:  dp.Name,
@@ -66,12 +59,28 @@ func dpName(dp *dpl.DPL) *Name {
 	}
 }
 
-func bisEntityName(el *csl.EL) *Name {
-	return &Name{
-		Original:  el.Name,
-		Processed: el.Name,
-		el:        el,
+func cslName(item interface{}) *Name {
+	switch v := item.(type) {
+	case *csl.EL:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			el:        v,
+		}
+	case *csl.MEU:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+		}
+	case *csl.SSI:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			ssi:       v,
+			altNames:  v.AlternateNames,
+		}
 	}
+	return &Name{}
 }
 
 type step interface {
@@ -86,11 +95,14 @@ type debugStep struct {
 
 func (ds *debugStep) apply(in *Name) error {
 	if err := ds.step.apply(in); err != nil {
-		// TODO(adam): PII log, we can't have this
-		ds.logger.Log("pipeline", fmt.Sprintf("%T encountered error: %v", ds.step, err), "original", in.Original)
-		return err
+		return ds.logger.Info().With(log.Fields{
+			"original": log.String(in.Original),
+		}).LogErrorf("%T encountered error: %v", ds.step, err).Err()
 	}
-	ds.logger.Log("pipeline", fmt.Sprintf("%T", ds.step), "result", in.Processed, "original", in.Original) // TODO(adam): PII log
+	ds.logger.Info().With(log.Fields{
+		"original": log.String(in.Original),
+		"result":   log.String(in.Processed),
+	}).Logf("%T", ds.step)
 	return nil
 }
 

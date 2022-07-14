@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -10,15 +10,18 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"time"
 
+	"github.com/moov-io/base/strx"
 	"go4.org/syncutil"
 )
 
 var (
 	// webhookGate is a goroutine-safe throttler designed to only allow N
 	// goroutines to run at any given time.
-	webhookGate = syncutil.NewGate(10)
+	webhookGate *syncutil.Gate
 
 	webhookHTTPClient = &http.Client{
 		Timeout: 10 * time.Second,
@@ -36,9 +39,17 @@ var (
 	}
 )
 
+func init() {
+	maxWorkers, err := strconv.ParseInt(strx.Or(os.Getenv("WEBHOOK_MAX_WORKERS"), "10"), 10, 32)
+	if err != nil {
+		panic(fmt.Sprintf("ERROR reading WEBHOOK_MAX_WORKERS: %v", err))
+	}
+	webhookGate = syncutil.NewGate(int(maxWorkers))
+}
+
 // callWebhook will take `body` as JSON and make a POST request to the provided webhook url.
 // Returned is the HTTP status code.
-func callWebhook(watchID string, body *bytes.Buffer, webhook string, authToken string) (int, error) {
+func callWebhook(body *bytes.Buffer, webhook string, authToken string) (int, error) {
 	webhook, err := validateWebhook(webhook)
 	if err != nil {
 		return 0, err
@@ -47,7 +58,7 @@ func callWebhook(watchID string, body *bytes.Buffer, webhook string, authToken s
 	// Setup HTTP request
 	req, err := http.NewRequest("POST", webhook, body)
 	if err != nil {
-		return 0, fmt.Errorf("unknown error with watch %s: %v", watchID, err)
+		return 0, fmt.Errorf("unknown error webhook: %v", err)
 	}
 	if authToken != "" {
 		req.Header.Set("Authorization", authToken)
@@ -62,7 +73,7 @@ func callWebhook(watchID string, body *bytes.Buffer, webhook string, authToken s
 		if resp == nil {
 			return 0, fmt.Errorf("unable to call webhook: %v", err)
 		}
-		return resp.StatusCode, fmt.Errorf("HTTP problem with watch %s: %v", watchID, err)
+		return resp.StatusCode, fmt.Errorf("HTTP problem with webhook %v", err)
 	}
 	if resp.Body != nil {
 		resp.Body.Close()

@@ -8,7 +8,8 @@ import (
 	"io/ioutil"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/moov-io/base/log"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +27,7 @@ func TestCSL(t *testing.T) {
 	file, err := Download(logger, dir)
 	require.NoError(t, err)
 
-	cslRecords, err := Read(file)
+	cslRecords, err := ReadFile(file)
 	require.NoError(t, err)
 
 	if len(cslRecords.SSIs) == 0 {

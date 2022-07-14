@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -11,9 +11,8 @@ import (
 	"testing"
 
 	"github.com/moov-io/base"
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/internal/database"
-
-	"github.com/go-kit/kit/log"
 )
 
 func TestDownload__manualRefreshPath(t *testing.T) {
@@ -30,13 +29,15 @@ func TestDownload__manualRefreshPath(t *testing.T) {
 		req := httptest.NewRequest("GET", "/data/refresh", nil)
 		req.Header.Set("x-request-id", base.ID())
 
-		manualRefreshHandler(log.NewNopLogger(), searcher, repo)(w, req)
+		updates := make(chan *DownloadStats)
+
+		manualRefreshHandler(log.NewNopLogger(), searcher, updates, repo)(w, req)
 		w.Flush()
 
 		if w.Code != http.StatusOK {
 			t.Errorf("bogus status code: %d: %s", w.Code, w.Body.String())
 		}
-		var stats downloadStats
+		var stats DownloadStats
 		if err := json.NewDecoder(w.Body).Decode(&stats); err != nil {
 			t.Error(err)
 		}
@@ -51,7 +52,6 @@ func TestDownload__manualRefreshPath(t *testing.T) {
 	check(t, &sqliteDownloadRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteDownloadRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteDownloadRepository{mysqlDB, log.NewNopLogger()})
 }

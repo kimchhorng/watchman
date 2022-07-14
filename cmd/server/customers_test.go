@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/moov-io/base"
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/internal/database"
 	"github.com/moov-io/watchman/pkg/ofac"
 
-	"github.com/go-kit/kit/log"
 	"github.com/gorilla/mux"
 )
 
@@ -158,9 +158,8 @@ func TestCustomer_get(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_EmptyHTTP(t *testing.T) {
@@ -184,9 +183,8 @@ func TestCustomer_EmptyHTTP(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_addWatch(t *testing.T) {
@@ -225,9 +223,8 @@ func TestCustomer_addWatch(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_addWatchNoBody(t *testing.T) {
@@ -279,9 +276,8 @@ func TestCustomer_addWatchMissingAuthToken(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_addNameWatch(t *testing.T) {
@@ -321,9 +317,8 @@ func TestCustomer_addNameWatch(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_addCustomerNameWatchNoBody(t *testing.T) {
@@ -369,9 +364,8 @@ func TestCustomer_addCustomerNameWatchNoBody(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_updateUnsafe(t *testing.T) {
@@ -402,9 +396,8 @@ func TestCustomer_updateUnsafe(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_updateException(t *testing.T) {
@@ -435,9 +428,8 @@ func TestCustomer_updateException(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_updateUnknown(t *testing.T) {
@@ -468,9 +460,8 @@ func TestCustomer_updateUnknown(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_updateNoUserId(t *testing.T) {
@@ -499,9 +490,8 @@ func TestCustomer_updateNoUserId(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_updateNoBody(t *testing.T) {
@@ -531,9 +521,8 @@ func TestCustomer_updateNoBody(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_removeWatch(t *testing.T) {
@@ -563,9 +552,8 @@ func TestCustomer_removeWatch(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomer_removeNameWatch(t *testing.T) {
@@ -596,9 +584,8 @@ func TestCustomer_removeNameWatch(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestCustomerRepository(t *testing.T) {
@@ -672,7 +659,6 @@ func TestCustomerRepository(t *testing.T) {
 	check(t, &sqliteCustomerRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteCustomerRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteCustomerRepository{mysqlDB, log.NewNopLogger()})
 }

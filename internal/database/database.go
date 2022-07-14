@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -10,17 +10,32 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-kit/kit/log"
+	"github.com/moov-io/base/log"
+
 	"github.com/lopezator/migrator"
 )
 
 func New(logger log.Logger, _type string) (*sql.DB, error) {
-	logger.Log("database", fmt.Sprintf("looking for %s database provider", _type))
+	logger.Logf("looking for %s database provider", _type)
+
 	switch strings.ToLower(_type) {
 	case "sqlite", "":
-		return sqliteConnection(logger, getSqlitePath()).Connect()
+		return sqliteConnection(logger.With(log.Fields{
+			"database": log.String("sqlite"),
+		}), getSqlitePath()).Connect()
+
 	case "mysql":
-		return mysqlConnection(logger, os.Getenv("MYSQL_USER"), os.Getenv("MYSQL_PASSWORD"), os.Getenv("MYSQL_ADDRESS"), os.Getenv("MYSQL_DATABASE")).Connect()
+		return NewMySQLConnection(
+			logger.With(log.Fields{
+				"database": log.String("mysql"),
+			}),
+			MySQLConfig{
+				Address:  os.Getenv("MYSQL_ADDRESS"),
+				Username: os.Getenv("MYSQL_USER"),
+				Password: os.Getenv("MYSQL_PASSWORD"),
+				Database: os.Getenv("MYSQL_DATABASE"),
+			},
+		)
 	}
 	return nil, fmt.Errorf("unknown database type %q", _type)
 }

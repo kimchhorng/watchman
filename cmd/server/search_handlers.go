@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -6,17 +6,18 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	moovhttp "github.com/moov-io/base/http"
+	"github.com/moov-io/base/log"
+	"github.com/moov-io/watchman/pkg/csl"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/metrics/prometheus"
 	"github.com/gorilla/mux"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
@@ -32,6 +33,28 @@ var (
 
 func addSearchRoutes(logger log.Logger, r *mux.Router, searcher *searcher) {
 	r.Methods("GET").Path("/search").HandlerFunc(search(logger, searcher))
+}
+
+func extractSearchLimit(r *http.Request) int {
+	limit := softResultsLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, _ := strconv.Atoi(v)
+		if n > 0 {
+			limit = n
+		}
+	}
+	if limit > hardResultsLimit {
+		limit = hardResultsLimit
+	}
+	return limit
+}
+
+func extractSearchMinMatch(r *http.Request) float64 {
+	if v := r.URL.Query().Get("minMatch"); v != "" {
+		n, _ := strconv.ParseFloat(v, 64)
+		return n
+	}
+	return 0.00
 }
 
 type addressSearchRequest struct {
@@ -66,14 +89,18 @@ func search(logger log.Logger, searcher *searcher) http.HandlerFunc {
 
 		// Search over all fields
 		if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
-			logger.Log("search", fmt.Sprintf("searching all names and address for %s", q), "requestID", requestID)
+			logger.Info().With(log.Fields{
+				"requestID": log.String(requestID),
+			}).Logf("searching all names and address for %s", q)
 			searchViaQ(logger, searcher, q)(w, r)
 			return
 		}
 
 		// Search by ID (found in an SDN's Remarks property)
 		if id := strings.TrimSpace(r.URL.Query().Get("id")); id != "" {
-			logger.Log("search", fmt.Sprintf("searching SDNs by remarks ID for %s", id))
+			logger.Info().With(log.Fields{
+				"requestID": log.String(requestID),
+			}).Logf("searching SDNs by remarks ID for %s", id)
 			searchByRemarksID(logger, searcher, id)(w, r)
 			return
 		}
@@ -81,26 +108,34 @@ func search(logger log.Logger, searcher *searcher) http.HandlerFunc {
 		// Search by Name
 		if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
 			if req := readAddressSearchRequest(r.URL); !req.empty() {
-				logger.Log("search", fmt.Sprintf("searching SDN names='%s' and addresses", name), "requestID", requestID)
+				logger.Info().With(log.Fields{
+					"requestID": log.String(requestID),
+				}).Logf("searching SDN names='%s' and addresses", name)
 				searchViaAddressAndName(logger, searcher, name, req)(w, r)
 				return
 			}
 
-			logger.Log("search", fmt.Sprintf("searching SDN names for %s", name), "requestID", requestID)
+			logger.Info().With(log.Fields{
+				"requestID": log.String(requestID),
+			}).Logf("searching SDN names for %s", name)
 			searchByName(logger, searcher, name)(w, r)
 			return
 		}
 
 		// Search by Alt Name
 		if alt := strings.TrimSpace(r.URL.Query().Get("altName")); alt != "" {
-			logger.Log("search", fmt.Sprintf("searching SDN alt names for %s", alt), "requestID", requestID)
+			logger.Info().With(log.Fields{
+				"requestID": log.String(requestID),
+			}).Logf("searching SDN alt names for %s", alt)
 			searchByAltName(logger, searcher, alt)(w, r)
 			return
 		}
 
 		// Search Addresses
 		if req := readAddressSearchRequest(r.URL); !req.empty() {
-			logger.Log("search", fmt.Sprintf("searching address for %#v", req), "requestID", requestID)
+			logger.Info().With(log.Fields{
+				"requestID": log.String(requestID),
+			}).Logf("searching address for %#v", req)
 			searchByAddress(logger, searcher, req)(w, r)
 			return
 		}
@@ -116,11 +151,13 @@ type searchResponse struct {
 	AltNames  []Alt     `json:"altNames"`
 	Addresses []Address `json:"addresses"`
 
-	// Consolidated Screening List
-	SectoralSanctions []SSI `json:"sectoralSanctions"`
 	// BIS
-	DeniedPersons []DP        `json:"deniedPersons"`
-	BISEntities   []BISEntity `json:"bisEntities"`
+	DeniedPersons []DP `json:"deniedPersons"`
+
+	// Consolidated Screening List
+	BISEntities       []*Result[csl.EL]  `json:"bisEntities"`
+	MilitaryEndUsers  []*Result[csl.MEU] `json:"militaryEndUsers"`
+	SectoralSanctions []*Result[csl.SSI] `json:"sectoralSanctions"`
 
 	// Metadata
 	RefreshedAt time.Time `json:"refreshedAt"`
@@ -232,17 +269,21 @@ var (
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.Addresses = s.TopAddresses(limit, minMatch, name)
 		},
-		// OFAC Sectoral Sanctions Identifications
-		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
-			resp.SectoralSanctions = s.TopSSIs(limit, minMatch, name)
-		},
+
 		// BIS Denied Persons
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.DeniedPersons = s.TopDPs(limit, minMatch, name)
 		},
-		// BIS Entity List
+
+		// Consolidated Screening List Results
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.BISEntities = s.TopBISEntities(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.MilitaryEndUsers = s.TopMEUs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.SectoralSanctions = s.TopSSIs(limit, minMatch, name)
 		},
 	}
 )

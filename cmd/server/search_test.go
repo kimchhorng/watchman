@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-kit/kit/log"
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/pkg/csl"
 	"github.com/moov-io/watchman/pkg/dpl"
 	"github.com/moov-io/watchman/pkg/ofac"
@@ -23,17 +23,20 @@ import (
 var (
 	// Live Searcher
 	testLiveSearcher  = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
-	testSearcherStats *downloadStats
+	testSearcherStats *DownloadStats
 	testSearcherOnce  sync.Once
 
 	// Mock Searchers
-	addressSearcher   = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
-	altSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
-	sdnSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
-	idSearcher        = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
-	dplSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
-	ssiSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	addressSearcher = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	altSearcher     = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	sdnSearcher     = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	idSearcher      = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	dplSearcher     = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+
+	// CSL Searchers
 	bisEntitySearcher = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	meuSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	ssiSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 )
 
 func init() {
@@ -125,7 +128,7 @@ func init() {
 			FRCitation:     "67 F.R. 7354 2/19/02 66 F.R. 48998 9/25/01 62 F.R. 26471 5/14/97 62 F.R. 34688 6/27/97 62 F.R. 60063 11/6/97 63 F.R. 25817 5/11/98 63 F.R. 58707 11/2/98 64 F.R. 23049 4/29/99",
 		},
 	}, noLogPipeliner)
-	ssiSearcher.SSIs = precomputeSSIs([]*csl.SSI{
+	ssiSearcher.SSIs = precomputeCSLEntities[csl.SSI]([]*csl.SSI{
 		{
 			EntityID:       "18782",
 			Type:           "Entity",
@@ -151,7 +154,25 @@ func init() {
 			SourceInfoURL:  "http://bit.ly/1MLgou0",
 		},
 	}, noLogPipeliner)
-	bisEntitySearcher.BISEntities = precomputeBISEntities([]*csl.EL{
+	meuSearcher.MilitaryEndUsers = precomputeCSLEntities[csl.MEU]([]*csl.MEU{
+		{
+			EntityID:  "26744194bd9b5cbec49db6ee29a4b53c697c7420",
+			Name:      "AECC Aviation Power Co. Ltd.",
+			Addresses: "Xiujia Bay, Weiyong Dt, Xian, 710021, CN",
+			FRNotice:  "85 FR 83799",
+			StartDate: "2020-12-23",
+			EndDate:   "",
+		},
+		{
+			EntityID:  "d54346ef81802673c1b1daeb2ca8bd5d13755abd",
+			Name:      "AECC China Gas Turbine Establishment",
+			Addresses: "No. 1 Hangkong Road, Mianyang, Sichuan, CN",
+			FRNotice:  "85 FR 83799",
+			StartDate: "2020-12-23",
+			EndDate:   "",
+		},
+	}, noLogPipeliner)
+	bisEntitySearcher.BISEntities = precomputeCSLEntities[csl.EL]([]*csl.EL{
 		{
 			Name:               "Mohammad Jan Khan Mangal",
 			AlternateNames:     []string{"Air I"},
@@ -493,62 +514,6 @@ func TestSearch__TopDPs(t *testing.T) {
 	// DPL doesn't have any entity IDs. Comparing expected address components instead
 	if dps[0].DeniedPerson.StreetAddress != "P.O. BOX 28360" || dps[0].DeniedPerson.City != "DUBAI" {
 		t.Errorf("%#v", dps[0].DeniedPerson)
-	}
-}
-
-func TestSearcher_TopSSIs(t *testing.T) {
-	ssis := ssiSearcher.TopSSIs(1, 0.00, "ROSOBORONEKSPORT")
-	if len(ssis) == 0 {
-		t.Fatal("empty SSIs")
-	}
-	if ssis[0].SectoralSanction.EntityID != "18782" {
-		t.Errorf("%#v", ssis[0].SectoralSanction)
-	}
-}
-
-func TestSearcher_TopSSIs_limit(t *testing.T) {
-	ssis := ssiSearcher.TopSSIs(2, 0.00, "SPECIALIZED DEPOSITORY")
-	if len(ssis) != 2 {
-		t.Fatalf("Expected 2 results, found %d", len(ssis))
-	}
-	if ssis[0].SectoralSanction.EntityID != "18736" {
-		t.Errorf("%#v", ssis[0].SectoralSanction)
-	}
-}
-
-func TestSearcher_TopSSIs_reportAltNameWeight(t *testing.T) {
-	ssis := ssiSearcher.TopSSIs(1, 0.00, "KENKYUSHO")
-	if len(ssis) == 0 {
-		t.Fatal("empty SSIs")
-	}
-	if ssis[0].SectoralSanction.EntityID != "18782" {
-		t.Errorf("%f - %#v", ssis[0].match, ssis[0].SectoralSanction)
-	}
-	if math.Abs(1.0-ssis[0].match) > 0.001 {
-		t.Errorf("Expected match=1.0 for alt names: %f - %#v", ssis[0].match, ssis[0].SectoralSanction)
-	}
-}
-
-func TestSearcher_TopBISEntities(t *testing.T) {
-	els := bisEntitySearcher.TopBISEntities(1, 0.00, "Khan")
-	if len(els) == 0 {
-		t.Fatal("empty ELs")
-	}
-	if els[0].Entity.Name != "Mohammad Jan Khan Mangal" {
-		t.Errorf("%#v", els[0].Entity)
-	}
-}
-
-func TestSearcher_TopBISEntities_AltName(t *testing.T) {
-	els := bisEntitySearcher.TopBISEntities(1, 0.00, "Luqman Sehreci.")
-	if len(els) == 0 {
-		t.Fatal("empty ELs")
-	}
-	if els[0].Entity.Name != "Luqman Yasin Yunus Shgragi" {
-		t.Errorf("%#v", els[0].Entity)
-	}
-	if math.Abs(1.0-els[0].match) > 0.001 {
-		t.Errorf("Expected match=1.0 for alt names: %f - %#v", els[0].match, els[0].Entity)
 	}
 }
 

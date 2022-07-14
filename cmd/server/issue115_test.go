@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -7,9 +7,8 @@ package main
 import (
 	"testing"
 
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/pkg/ofac"
-
-	"github.com/go-kit/kit/log"
 )
 
 func TestIssue115__TopSDNs(t *testing.T) {

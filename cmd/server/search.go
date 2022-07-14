@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -17,12 +16,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/moov-io/base/strx"
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/pkg/csl"
 	"github.com/moov-io/watchman/pkg/dpl"
 	"github.com/moov-io/watchman/pkg/ofac"
 
-	"github.com/go-kit/kit/log"
 	"github.com/xrash/smetrics"
 	"go4.org/syncutil"
 )
@@ -40,11 +38,14 @@ type searcher struct {
 	SDNs      []*SDN
 	Addresses []*Address
 	Alts      []*Alt
-	SSIs      []*SSI
 
 	// BIS
-	DPs         []*DP
-	BISEntities []*BISEntity
+	DPs []*DP
+
+	// US Consolidated Screening List
+	BISEntities      []*Result[csl.EL]
+	MilitaryEndUsers []*Result[csl.MEU]
+	SSIs             []*Result[csl.SSI]
 
 	// metadata
 	lastRefreshedAt time.Time
@@ -57,11 +58,13 @@ type searcher struct {
 }
 
 func newSearcher(logger log.Logger, pipeline *pipeliner, workers int) *searcher {
-	logger.Log("search", fmt.Sprintf("allowing only %d workers", workers))
+	logger.Logf("allowing only %d workers for search", workers)
 	return &searcher{
-		logger: logger,
-		pipe:   pipeline,
-		Gate:   syncutil.NewGate(workers),
+		logger: logger.With(log.Fields{
+			"component": log.String("pipeline"),
+		}),
+		pipe: pipeline,
+		Gate: syncutil.NewGate(workers),
 	}
 }
 
@@ -426,115 +429,6 @@ func (s *searcher) TopDPs(limit int, minMatch float64, name string) []DP {
 	return out
 }
 
-// TopSSIs searches Sectoral Sanctions records by Name and Alias
-func (s *searcher) TopSSIs(limit int, minMatch float64, name string) []SSI {
-	name = precompute(name)
-
-	s.RLock()
-	defer s.RUnlock()
-
-	if len(s.SSIs) == 0 {
-		return nil
-	}
-	xs := newLargest(limit, minMatch)
-
-	var wg sync.WaitGroup
-	wg.Add(len(s.SSIs))
-
-	for i := range s.SSIs {
-		s.Gate.Start()
-		go func(i int) {
-			defer wg.Done()
-			defer s.Gate.Done()
-			it := &item{
-				value:  s.SSIs[i],
-				weight: jaroWinkler(s.SSIs[i].name, name),
-			}
-			for _, alt := range s.SSIs[i].SectoralSanction.AlternateNames {
-				if alt == "" {
-					continue
-				}
-				currWeight := jaroWinkler(alt, name)
-				if currWeight > it.weight {
-					it.weight = currWeight
-				}
-			}
-			xs.add(it)
-		}(i)
-	}
-	wg.Wait()
-
-	out := make([]SSI, 0)
-	for _, thisItem := range xs.items {
-		if v := thisItem; v != nil {
-			ss, ok := v.value.(*SSI)
-			if !ok {
-				continue
-			}
-			ssi := *ss
-			ssi.match = v.weight
-			out = append(out, ssi)
-		}
-	}
-	return out
-}
-
-// TopBISEntities searches BIS Entity List records by name and alias
-func (s *searcher) TopBISEntities(limit int, minMatch float64, name string) []BISEntity {
-	name = precompute(name)
-
-	s.RLock()
-	defer s.RUnlock()
-
-	if len(s.BISEntities) == 0 {
-		return nil
-	}
-
-	xs := newLargest(limit, minMatch)
-
-	var wg sync.WaitGroup
-	wg.Add(len(s.BISEntities))
-
-	for i := range s.BISEntities {
-		s.Gate.Start()
-		go func(i int) {
-			defer wg.Done()
-			defer s.Gate.Done()
-
-			it := &item{
-				value:  s.BISEntities[i],
-				weight: jaroWinkler(s.BISEntities[i].name, name),
-			}
-			for _, alt := range s.BISEntities[i].Entity.AlternateNames {
-				if alt == "" {
-					continue
-				}
-				currWeight := jaroWinkler(alt, name)
-				if currWeight > it.weight {
-					it.weight = currWeight
-				}
-			}
-
-			xs.add(it)
-		}(i)
-	}
-	wg.Wait()
-
-	out := make([]BISEntity, 0)
-	for _, thisItem := range xs.items {
-		if v := thisItem; v != nil {
-			ss, ok := v.value.(*BISEntity)
-			if !ok {
-				continue
-			}
-			el := *ss
-			el.match = v.weight
-			out = append(out, el)
-		}
-	}
-	return out
-}
-
 // SDN is ofac.SDN wrapped with precomputed search metadata
 type SDN struct {
 	*ofac.SDN
@@ -580,7 +474,7 @@ func precomputeSDNs(sdns []*ofac.SDN, addrs []*ofac.Address, pipe *pipeliner) []
 		nn := sdnName(sdns[i], findAddresses(sdns[i].EntityID, addrs))
 
 		if err := pipe.Do(nn); err != nil {
-			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining SDN: %v", err))
+			pipe.logger.Logf("pipeline", fmt.Sprintf("problem pipelining SDN: %v", err))
 			continue
 		}
 
@@ -654,7 +548,7 @@ func precomputeAlts(alts []*ofac.AlternateIdentity, pipe *pipeliner) []*Alt {
 		an := altName(alts[i])
 
 		if err := pipe.Do(an); err != nil {
-			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining SDN: %v", err))
+			pipe.logger.LogErrorf("problem pipelining SDN: %v", err)
 			continue
 		}
 
@@ -689,7 +583,7 @@ func precomputeDPs(persons []*dpl.DPL, pipe *pipeliner) []*DP {
 	for i := range persons {
 		nn := dpName(persons[i])
 		if err := pipe.Do(nn); err != nil {
-			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining DP: %v", err))
+			pipe.logger.LogErrorf("problem pipelining DP: %v", err)
 			continue
 		}
 		out[i] = &DP{
@@ -700,123 +594,35 @@ func precomputeDPs(persons []*dpl.DPL, pipe *pipeliner) []*DP {
 	return out
 }
 
-type SSI struct {
-	SectoralSanction *csl.SSI
-	match            float64
-	name             string
-}
-
-func (s SSI) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		*csl.SSI
-		Match float64 `json:"match"`
-	}{
-		s.SectoralSanction,
-		s.match,
-	})
-}
-
-func precomputeSSIs(ssis []*csl.SSI, pipe *pipeliner) []*SSI {
-	out := make([]*SSI, len(ssis))
-	for i, ssi := range ssis {
-		nn := ssiName(ssi)
-		if err := pipe.Do(nn); err != nil {
-			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining SSI: %v", err))
-			continue
-		}
-
-		var altNames []string
-		for i := range ssi.AlternateNames {
-			altNN := &Name{Processed: ssi.AlternateNames[i]}
-			if err := pipe.Do(altNN); err != nil {
-				pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining alt: %v", err))
-				continue
-			}
-			altNames = append(altNames, altNN.Processed)
-		}
-		ssi.AlternateNames = altNames
-
-		out[i] = &SSI{
-			SectoralSanction: ssi,
-			name:             nn.Processed,
-		}
-	}
-	return out
-}
-
-type BISEntity struct {
-	Entity *csl.EL
-	match  float64
-	name   string
-}
-
-func (e BISEntity) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		*csl.EL
-		Match float64 `json:"match"`
-	}{
-		e.Entity,
-		e.match,
-	})
-}
-
-func precomputeBISEntities(els []*csl.EL, pipe *pipeliner) []*BISEntity {
-	out := make([]*BISEntity, len(els))
-	for i, el := range els {
-		nn := bisEntityName(el)
-		if err := pipe.Do(nn); err != nil {
-			pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining EL: %v", err))
-			continue
-		}
-
-		var altNames []string
-		for i := range el.AlternateNames {
-			altNN := &Name{Processed: el.AlternateNames[i]}
-			if err := pipe.Do(altNN); err != nil {
-				pipe.logger.Log("pipeline", fmt.Sprintf("problem pipelining alt: %v", err))
-				continue
-			}
-			altNames = append(altNames, altNN.Processed)
-		}
-		el.AlternateNames = altNames
-
-		out[i] = &BISEntity{
-			Entity: el,
-			name:   nn.Processed,
-		}
-	}
-	return out
-}
-
-func extractSearchLimit(r *http.Request) int {
-	limit := softResultsLimit
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, _ := strconv.Atoi(v)
-		if n > 0 {
-			limit = n
-		}
-	}
-	if limit > hardResultsLimit {
-		limit = hardResultsLimit
-	}
-	return limit
-}
-
-func extractSearchMinMatch(r *http.Request) float64 {
-	if v := r.URL.Query().Get("minMatch"); v != "" {
-		n, _ := strconv.ParseFloat(v, 64)
-		return n
-	}
-	return 0.00
-}
-
 var (
-	exactMatchFavoritism = readExactMatchFavoritism(os.Getenv("EXACT_MATCH_FAVORITISM"))
+	// Jaro-Winkler parameters
+	boostThreshold = readFloat(os.Getenv("JARO_WINKLER_BOOST_THRESHOLD"), 0.7)
+	prefixSize     = readInt(os.Getenv("JARO_WINKLER_PREFIX_SIZE"), 4)
+
+	// Watchman parameters
+	exactMatchFavoritism = readFloat(os.Getenv("EXACT_MATCH_FAVORITISM"), 0.0)
 )
 
-func readExactMatchFavoritism(input string) float64 {
-	weight, _ := strconv.ParseFloat(strx.Or(input, "0.0"), 32)
-	return weight
+func readFloat(override string, value float64) float64 {
+	if override != "" {
+		n, err := strconv.ParseFloat(override, 32)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse %q as float64", override))
+		}
+		return n
+	}
+	return value
+}
+
+func readInt(override string, value int) int {
+	if override != "" {
+		n, err := strconv.ParseInt(override, 10, 32)
+		if err != nil {
+			panic(fmt.Errorf("unable to parse %q as int", override))
+		}
+		return int(n)
+	}
+	return value
 }
 
 // jaroWinkler runs the similarly named algorithm over the two input strings and averages their match percentages
@@ -828,9 +634,10 @@ func jaroWinkler(s1, s2 string) float64 {
 		if len(parts) == 0 {
 			return 0.0
 		}
-		max := smetrics.JaroWinkler(word, parts[0], 0.7, 4)
+
+		max := smetrics.JaroWinkler(word, parts[0], boostThreshold, prefixSize)
 		for i := 1; i < len(parts); i++ {
-			if score := smetrics.JaroWinkler(word, parts[i], 0.7, 4); score > max {
+			if score := smetrics.JaroWinkler(word, parts[i], boostThreshold, prefixSize); score > max {
 				max = score
 			}
 		}

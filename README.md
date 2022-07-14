@@ -33,13 +33,36 @@ Moov Watchman offers download, parse, and search functions over numerous trade s
 
 Lists included in search are:
 
-- US Treasury - Office of Foreign Assets Control (OFAC)
-  - [Specially Designated Nationals](https://home.treasury.gov/policy-issues/financial-sanctions/specially-designated-nationals-and-blocked-persons-list-sdn-human-readable-lists) (SDN)
+- US Treasury - Office of Foreign Assets Control
+  - [Specially Designated Nationals](https://home.treasury.gov/policy-issues/financial-sanctions/specially-designated-nationals-and-blocked-persons-list-sdn-human-readable-lists)
     - Includes SDN, SDN Alternative Names, SDN Addresses
-  - [Sectoral Sanctions Identifications](https://home.treasury.gov/policy-issues/financial-sanctions/consolidated-sanctions-list/sectoral-sanctions-identifications-ssi-list) (SSI)
-- US Department of Commerce - Bureau of Industry and Security (BIS)
-  - [Denied Persons List](https://bis.data.commerce.gov/dataset/Denied-Persons-List-with-Denied-US-Export-Privileg/xwtd-wd7a/data) (DPL)
-  - [Entity List](https://www.bis.doc.gov/index.php/policy-guidance/lists-of-parties-of-concern/entity-list) (EL)
+- [United States Consolidated Screening List](https://www.export.gov/article2?id=Consolidated-Screening-List)
+   - Department of Commerce – Bureau of Industry and Security
+      - [Denied Persons List](http://www.bis.doc.gov/dpl/default.shtm)
+      - [Entity List](http://www.bis.doc.gov/entities/default.htm)
+   - Department of the Treasury – Office of Foreign Assets Control
+      - [Sectoral Sanctions Identifications List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/ssi_list.aspx)
+
+<!--
+TODO(adam): Update on v0.16.0 release
+- US Treasury - Office of Foreign Assets Control
+  - [Specially Designated Nationals](https://home.treasury.gov/policy-issues/financial-sanctions/specially-designated-nationals-and-blocked-persons-list-sdn-human-readable-lists)
+    - Includes SDN, SDN Alternative Names, SDN Addresses
+- [United States Consolidated Screening List](https://www.export.gov/article2?id=Consolidated-Screening-List)
+   - Department of Commerce – Bureau of Industry and Security
+      - [Denied Persons List](http://www.bis.doc.gov/dpl/default.shtm)
+      - [Unverified List](http://www.bis.doc.gov/enforcement/unverifiedlist/unverified_parties.html)
+      - [Entity List](http://www.bis.doc.gov/entities/default.htm)
+   - Department of State – Bureau of International Security and Non-proliferation
+      - [Nonproliferation Sanctions](http://www.state.gov/t/isn/c15231.htm)
+   - Department of State – Directorate of Defense Trade Controls
+      - [AECA Debarred List](http://www.pmddtc.state.gov/compliance/debar_intro.html)
+   - Department of the Treasury – Office of Foreign Assets Control
+      - [Specially Designated Nationals List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/default.aspx)
+      - [Foreign Sanctions Evaders List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/fse_list.aspx)
+      - [Sectoral Sanctions Identifications List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/ssi_list.aspx)
+      - [Palestinian Legislative Council List](https://www.treasury.gov/resource-center/sanctions/Terrorism-Proliferation-Narcotics/Pages/pa.aspx)
+-->
 
 All United States and European Union companies are required to comply with various regulations and sanction lists (such as the US Patriot Act requiring compliance with the BIS Denied Persons List). Moov's primary usage for this project is with ACH origination in our [paygate](https://github.com/moov-io/paygate) project.
 
@@ -176,6 +199,8 @@ PONG
 | `DATA_REFRESH_INTERVAL` | Interval for data redownload and reparse. `off` disables this refreshing. | 12h |
 | `INITIAL_DATA_DIRECTORY` | Directory filepath with initial files to use instead of downloading. Periodic downloads will replace the initial files. | Empty |
 | `EXACT_MATCH_FAVORITISM` | Extra weighting assigned to exact matches. | 0.0 |
+| `JARO_WINKLER_BOOST_THRESHOLD` | Jaro-Winkler boost threshold. | 0.7 |
+| `JARO_WINKLER_PREFIX_SIZE` | Jaro-Winkler prefix size. | 4 |
 | `WEBHOOK_BATCH_SIZE` | How many watches to read from database per batch of async searches. | 100 |
 | `LOG_FORMAT` | Format for logging lines to be written as. | Options: `json`, `plain` - Default: `plain` |
 | `BASE_PATH` | HTTP path to serve API and web UI from. | `/` |
@@ -185,6 +210,9 @@ PONG
 | `HTTPS_KEY_FILE`  | Filepath of a private key matching the leaf certificate from `HTTPS_CERT_FILE`. | Empty |
 | `DATABASE_TYPE` | Which database option to use (Options: `sqlite`, `mysql`). | Default: `sqlite` |
 | `WEB_ROOT` | Directory to serve web UI from. | Default: `webui/` |
+| `WEBHOOK_MAX_WORKERS` | Maximum number of workers processing webhooks. | Default: 10 |
+| `DOWNLOAD_WEBHOOK_URL` | Optional webhook URL called when data downloads / refreshes occur. | Empty |
+| `DOWNLOAD_WEBHOOK_AUTH_TOKEN` | Optional `Authorization` header included on download webhooks. | Empty |
 
 #### List configurations
 
@@ -194,7 +222,7 @@ PONG
 | `DPL_DOWNLOAD_TEMPLATE` | HTTP address for downloading the DPL. | `https://www.bis.doc.gov/dpl/%s` |
 | `CSL_DOWNLOAD_TEMPLATE` | HTTP address for downloading the Consolidated Screening List (CSL), which is a collection of US government sanctions lists. | `https://api.trade.gov/consolidated_screening_list/%s` |
 | `KEEP_STOPWORDS` | Boolean to keep stopwords in names. | `false` |
-| `DEBUG_NAME_PIPELINE` | Boolean to pring debug messages for each name (SDN, SSI) processing step. | `false` |
+| `DEBUG_NAME_PIPELINE` | Boolean to print debug messages for each name (SDN, SSI) processing step. | `false` |
 
 #### Storage
 
@@ -221,9 +249,13 @@ Refer to the SQLite driver documentation for [connection parameters](https://git
 
 When Watchman sends a [webhook](https://en.wikipedia.org/wiki/Webhook) to your application, the body will contain a JSON representation of the [Company](https://godoc.org/github.com/moov-io/watchman/client#OfacCompany) or [Customer](https://godoc.org/github.com/moov-io/watchman/client#OfacCustomer) model as the body to a POST request. You can see an [example in Go](examples/webhook/webhook.go).
 
-An `Authorization` header will also be sent with the `authToken` provided when setting up the watch. Clients should verify this token to ensure authenticated communicated.
+An `Authorization` header will also be sent with the `authToken` provided when setting up the watch. Clients should verify this token to ensure authenticated communication.
 
-Webhook notifications are ran after the OFAC data is successfully refreshed, which is determined by the `DATA_REFRESH_INTERVAL` environmental variable.
+Webhook notifications are run after the OFAC data is successfully refreshed, which is determined by the `DATA_REFRESH_INTERVAL` environmental variable.
+
+##### Downloads
+
+Moov Watchman supports sending a webhook when the underlying data is refreshed. The body will be the count of entities indexed for each list. The body will be in JSON format and the same schema as the manual data refresh endpoint.
 
 ##### Watching a specific customer or company by ID
 
@@ -262,7 +294,7 @@ $ go doc github.com/moov-io/watchman/client Search
 
 ### In-browser Watchman search
 
-Using our [in-browser utility](https://oss.moov.io/watchman/), you can instantly perform advanced Watchman searches. Simply fill search fields and generate a detailed report that includes match percentage, alternative names, effective/expiration dates, IDs, addresses, and other useful information. This tool is particularly useful for completing quick searches with the aid of a intutive interface.
+Using our [in-browser utility](https://oss.moov.io/watchman/), you can instantly perform advanced Watchman searches. Simply fill search fields and generate a detailed report that includes match percentage, alternative names, effective/expiration dates, IDs, addresses, and other useful information. This tool is particularly useful for completing quick searches with the aid of a intuitive interface.
 
 ## Reporting blocks to OFAC
 

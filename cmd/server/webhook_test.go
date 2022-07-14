@@ -1,4 +1,4 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
@@ -133,7 +133,7 @@ func TestWebhook_call(t *testing.T) {
 	if body == nil {
 		t.Fatalf("nil body: %v", err)
 	}
-	if _, err := callWebhook(base.ID(), body, server.URL, "authToken"); err != nil {
+	if _, err := callWebhook(body, server.URL, "authToken"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -142,7 +142,7 @@ func TestWebhook__CallErr(t *testing.T) {
 	var body bytes.Buffer
 	body.WriteString(`{"foo": "bar"}`)
 
-	status, err := callWebhook("watchID", &body, "https://localhost/12345", "12345")
+	status, err := callWebhook(&body, "https://localhost/12345", "12345")
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -166,7 +166,6 @@ func TestWebhook_record(t *testing.T) {
 	check(t, &sqliteWebhookRepository{sqliteDB.DB})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteWebhookRepository{mysqlDB.DB})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteWebhookRepository{mysqlDB})
 }

@@ -1,11 +1,13 @@
-// Copyright 2020 The Moov Authors
+// Copyright 2022 The Moov Authors
 // Use of this source code is governed by an Apache License
 // license that can be found in the LICENSE file.
 
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -14,11 +16,36 @@ import (
 	"testing"
 	"time"
 
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/internal/database"
 
-	"github.com/go-kit/kit/log"
 	"github.com/gorilla/mux"
+	"github.com/stretchr/testify/require"
 )
+
+func TestDownloadStats(t *testing.T) {
+	when := time.Date(2022, time.May, 21, 9, 4, 0, 0, time.UTC)
+	bs, err := json.Marshal(&DownloadStats{
+		SDNs: 1,
+		Errors: []error{
+			errors.New("bad thing"),
+		},
+		RefreshedAt: when,
+	})
+	require.NoError(t, err)
+
+	var wrapper struct {
+		SDNs      int
+		Errors    []string
+		Timestamp time.Time
+	}
+	err = json.NewDecoder(bytes.NewReader(bs)).Decode(&wrapper)
+	require.NoError(t, err)
+
+	require.Equal(t, 1, wrapper.SDNs)
+	require.Len(t, wrapper.Errors, 1)
+	require.Equal(t, when, wrapper.Timestamp)
+}
 
 func TestSearcher__refreshInterval(t *testing.T) {
 	if v := getDataRefreshInterval(log.NewNopLogger(), ""); v.String() != "12h0m0s" {
@@ -64,9 +91,10 @@ func TestDownload_record(t *testing.T) {
 	t.Parallel()
 
 	check := func(t *testing.T, repo *sqliteDownloadRepository) {
-		stats := &downloadStats{
-			SDNs: 1, Alts: 12, Addresses: 42, SectoralSanctions: 39,
-			DeniedPersons: 13, BISEntities: 32,
+		stats := &DownloadStats{
+			SDNs: 1, Alts: 12, Addresses: 42,
+			DeniedPersons: 13,
+			BISEntities:   32, SectoralSanctions: 39,
 		}
 		if err := repo.recordStats(stats); err != nil {
 			t.Fatal(err)
@@ -106,9 +134,8 @@ func TestDownload_record(t *testing.T) {
 	check(t, &sqliteDownloadRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteDownloadRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteDownloadRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestDownload_route(t *testing.T) {
@@ -119,7 +146,7 @@ func TestDownload_route(t *testing.T) {
 		req := httptest.NewRequest("GET", "/downloads", nil)
 		req.Header.Set("x-user-id", "test")
 
-		repo.recordStats(&downloadStats{SDNs: 1, Alts: 421, Addresses: 1511, DeniedPersons: 731, SectoralSanctions: 289, BISEntities: 189})
+		repo.recordStats(&DownloadStats{SDNs: 1, Alts: 421, Addresses: 1511, DeniedPersons: 731, SectoralSanctions: 289, BISEntities: 189})
 
 		router := mux.NewRouter()
 		addDownloadRoutes(log.NewNopLogger(), router, repo)
@@ -130,7 +157,7 @@ func TestDownload_route(t *testing.T) {
 			t.Errorf("bogus status code: %d", w.Code)
 		}
 
-		var downloads []Download
+		var downloads []DownloadStats
 		if err := json.NewDecoder(w.Body).Decode(&downloads); err != nil {
 			t.Error(err)
 		}
@@ -145,9 +172,8 @@ func TestDownload_route(t *testing.T) {
 	check(t, &sqliteDownloadRepository{sqliteDB.DB, log.NewNopLogger()})
 
 	// MySQL tests
-	mysqlDB := database.CreateTestMySQLDB(t)
-	defer mysqlDB.Close()
-	check(t, &sqliteDownloadRepository{mysqlDB.DB, log.NewNopLogger()})
+	mysqlDB := database.TestMySQLConnection(t)
+	check(t, &sqliteDownloadRepository{mysqlDB, log.NewNopLogger()})
 }
 
 func TestDownload__lastRefresh(t *testing.T) {
