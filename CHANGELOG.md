@@ -1,4 +1,4 @@
-## v0.22.0 (Unreleased)
+## v0.22.0 (Released 2022-07-21)
 
 Watchman v0.22.0 has started to use Go 1.18 and its support for generic programming has helped us greatly clean up our code. We've also refreshed our [documentation website](https://moov-io.github.io/watchman/).
 
@@ -6,7 +6,7 @@ ADDITIONS
 
 - cmd/server: add Military End User (MEU) results to search response
 - cmd/server: add an optional webhook to be notified of data downloads
-- cmd/server: read WEBHOOK_MAX_WORKERS to configure max webhook processors
+- cmd/server: read `WEBHOOK_MAX_WORKERS` to configure max webhook processors
 - csl: support extracting Military End User (MEU) List
 - feat: allow overrides to jaro-winkler parameters
 
@@ -14,6 +14,7 @@ IMPROVEMENTS
 
 - cmd/server: dig into CSL entity types to precompute AlternateNames
 - cmd/server: generic function for CSL entity precompute step
+- docs: show sdnType examples in query params
 
 BUILD
 
