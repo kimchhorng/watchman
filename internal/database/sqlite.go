@@ -7,7 +7,6 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,12 +111,16 @@ func (s *sqlite) Connect() (*sql.DB, error) {
 	}
 
 	// Migrate our database
-	if m, err := migrator.New(sqliteMigrations); err != nil {
+	opts := []migrator.Option{sqliteMigrations}
+	if s != nil {
+		opts = append(opts, migrator.WithLogger(newMigrationLogger(s.logger)))
+	}
+	mig, err := migrator.New(opts...)
+	if err != nil {
 		return db, err
-	} else {
-		if err := m.Migrate(db); err != nil {
-			return db, err
-		}
+	}
+	if err := mig.Migrate(db); err != nil {
+		return db, err
 	}
 
 	// Spin up metrics only after everything works
@@ -172,7 +175,7 @@ func (r *TestSQLiteDB) Close() error {
 //
 // Callers should call close on the returned *TestSQLiteDB.
 func CreateTestSqliteDB(t *testing.T) *TestSQLiteDB {
-	dir, err := ioutil.TempDir("", "sqlite")
+	dir, err := os.MkdirTemp("", "sqlite")
 	if err != nil {
 		t.Fatalf("sqlite test: %v", err)
 	}

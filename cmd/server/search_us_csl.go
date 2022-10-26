@@ -5,10 +5,37 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
 	"reflect"
 
+	moovhttp "github.com/moov-io/base/http"
+	"github.com/moov-io/base/log"
 	"github.com/moov-io/watchman/pkg/csl"
 )
+
+func searchUSCSL(logger log.Logger, searcher *searcher) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w = wrapResponseWriter(logger, w, r)
+		requestID := moovhttp.GetRequestID(r)
+
+		limit := extractSearchLimit(r)
+		filters := buildFilterRequest(r.URL)
+		minMatch := extractSearchMinMatch(r)
+
+		name := r.URL.Query().Get("name")
+		resp := buildFullSearchResponseWith(searcher, cslGatherings, filters, limit, minMatch, name)
+
+		logger.Info().With(log.Fields{
+			"name":      log.String(name),
+			"requestID": log.String(requestID),
+		}).Log("performing US CSL search")
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(resp)
+	}
+}
 
 func precomputeCSLEntities[T any](items []*T, pipe *pipeliner) []*Result[T] {
 	out := make([]*Result[T], len(items))
@@ -81,4 +108,92 @@ func (s *searcher) TopSSIs(limit int, minMatch float64, name string) []*Result[c
 	defer s.Gate.Done()
 
 	return topResults[csl.SSI](limit, minMatch, name, s.SSIs)
+}
+
+// TopUVLs search Unverified Lists records by Name and Alias
+func (s *searcher) TopUVLs(limit int, minMatch float64, name string) []*Result[csl.UVL] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.UVL](limit, minMatch, name, s.UVLs)
+}
+
+// TopISNs searches Nonproliferation Sanctions records by Name and Alias
+func (s *searcher) TopISNs(limit int, minMatch float64, name string) []*Result[csl.ISN] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.ISN](limit, minMatch, name, s.ISNs)
+}
+
+// TopFSEs searches Foreign Sanctions Evaders records by Name and Alias
+func (s *searcher) TopFSEs(limit int, minMatch float64, name string) []*Result[csl.FSE] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.FSE](limit, minMatch, name, s.FSEs)
+}
+
+// TopPLCs searches Palestinian Legislative Council records by Name and Alias
+func (s *searcher) TopPLCs(limit int, minMatch float64, name string) []*Result[csl.PLC] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.PLC](limit, minMatch, name, s.PLCs)
+}
+
+// TopCAPs searches the CAPTA list by Name and Alias
+func (s *searcher) TopCAPs(limit int, minMatch float64, name string) []*Result[csl.CAP] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.CAP](limit, minMatch, name, s.CAPs)
+}
+
+// TopDTCs searches the ITAR Debarred list by Name and Alias
+func (s *searcher) TopDTCs(limit int, minMatch float64, name string) []*Result[csl.DTC] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.DTC](limit, minMatch, name, s.DTCs)
+}
+
+// TopCMICs searches the Non-SDN Chinese Military Industrial Complex list by Name and Alias
+func (s *searcher) TopCMICs(limit int, minMatch float64, name string) []*Result[csl.CMIC] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.CMIC](limit, minMatch, name, s.CMICs)
+}
+
+// TopNS_MBS searches the Non-SDN Menu Based Sanctions list by Name and Alias
+func (s *searcher) TopNS_MBS(limit int, minMatch float64, name string) []*Result[csl.NS_MBS] {
+	s.RLock()
+	defer s.RUnlock()
+
+	s.Gate.Start()
+	defer s.Gate.Done()
+
+	return topResults[csl.NS_MBS](limit, minMatch, name, s.NS_MBSs)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/moov-io/watchman/pkg/csl"
 	"github.com/moov-io/watchman/pkg/dpl"
 	"github.com/moov-io/watchman/pkg/ofac"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -37,6 +38,14 @@ var (
 	bisEntitySearcher = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 	meuSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 	ssiSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	isnSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	uvlSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	fseSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	plcSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	capSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	dtcSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	cmicSearcher      = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	ns_mbsSearcher    = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 )
 
 func init() {
@@ -196,6 +205,128 @@ func init() {
 			SourceInfoURL:      "http://bit.ly/1L47xrV",
 		},
 	}, noLogPipeliner)
+	isnSearcher.ISNs = precomputeCSLEntities[csl.ISN]([]*csl.ISN{
+		{
+			EntityID:              "2d2db09c686e4829d0ef1b0b04145eec3d42cd88",
+			Programs:              []string{"E.O. 13382", "Export-Import Bank Act", "Nuclear Proliferation Prevention Act"},
+			Name:                  "Abdul Qadeer Khan",
+			FederalRegisterNotice: "Vol. 74, No. 11, 01/16/09",
+			StartDate:             "2009-01-09",
+			Remarks:               []string{"Associated with the A.Q. Khan Network"},
+			SourceListURL:         "http://bit.ly/1NuVFxV",
+			AlternateNames:        []string{"ZAMAN", "Haydar"},
+			SourceInfoURL:         "http://bit.ly/1NuVFxV",
+		},
+	}, noLogPipeliner)
+	uvlSearcher.UVLs = precomputeCSLEntities[csl.UVL]([]*csl.UVL{
+		{
+			EntityID:      "f15fa805ff4ac5e09026f5e78011a1bb6b26dec2",
+			Name:          "Atlas Sanatgaran",
+			Addresses:     []string{"Komitas 26/114, Yerevan, Armenia, AM"},
+			SourceListURL: "http://bit.ly/1iwwTSJ",
+			SourceInfoURL: "http://bit.ly/1Qi4R7Z",
+		},
+	}, noLogPipeliner)
+	fseSearcher.FSEs = precomputeCSLEntities[csl.FSE]([]*csl.FSE{
+		{
+			EntityID:      "17526",
+			EntityNumber:  "17526",
+			Type:          "Individual",
+			Programs:      []string{"SYRIA", "FSE-SY"},
+			Name:          "BEKTAS, Halis",
+			Addresses:     nil,
+			SourceListURL: "https://bit.ly/1QWTIfE",
+			Citizenships:  "CH",
+			DatesOfBirth:  "1966-02-13",
+			SourceInfoURL: "http://bit.ly/1N1docf",
+			IDs:           []string{"CH, X0906223, Passport"},
+		},
+	}, noLogPipeliner)
+	plcSearcher.PLCs = precomputeCSLEntities[csl.PLC]([]*csl.PLC{
+		{
+			EntityID:       "9702",
+			EntityNumber:   "9702",
+			Type:           "Individual",
+			Programs:       []string{"NS-PLC", "Office of Misinformation"},
+			Name:           "SALAMEH, Salem",
+			Addresses:      []string{"123 Dunbar Street, Testerville, TX, Palestine"},
+			Remarks:        "HAMAS - Der al-Balah",
+			SourceListURL:  "https://bit.ly/1QWTIfE",
+			AlternateNames: []string{"SALAMEH, Salem Ahmad Abdel Hadi"},
+			DatesOfBirth:   "1951",
+			PlacesOfBirth:  "",
+			SourceInfoURL:  "http://bit.ly/2tjOLpx",
+		},
+	}, noLogPipeliner)
+	capSearcher.CAPs = precomputeCSLEntities[csl.CAP]([]*csl.CAP{
+		{
+			EntityID:      "20002",
+			EntityNumber:  "20002",
+			Type:          "Entity",
+			Programs:      []string{"UKRAINE-EO13662", "RUSSIA-EO14024"},
+			Name:          "BM BANK PUBLIC JOINT STOCK COMPANY",
+			Addresses:     []string{"Bld 3 8/15, Rozhdestvenka St., Moscow, 107996, RU"},
+			Remarks:       []string{"All offices worldwide", "for more information on directives, please visit the following link: https://www.treasury.gov/resource-center/sanctions/Programs/Pages/ukraine.aspx#directives", "(Linked To: VTB BANK PUBLIC JOINT STOCK COMPANY)"},
+			SourceListURL: "",
+			AlternateNames: []string{"BM BANK JSC", "BM BANK AO", "AKTSIONERNOE OBSHCHESTVO BM BANK",
+				"PAO BM BANK", "BANK MOSKVY PAO", "BANK OF MOSCOW",
+				"AKTSIONERNY KOMMERCHESKI BANK BANK MOSKVY OTKRYTOE AKTSIONERNOE OBSCHCHESTVO",
+				"JOINT STOCK COMMERCIAL BANK - BANK OF MOSCOW OPEN JOINT STOCK COMPANY"},
+			SourceInfoURL: "http://bit.ly/2PqohAD",
+			IDs: []string{"RU, 1027700159497, Registration Number",
+				"RU, 29292940, Government Gazette Number",
+				"MOSWRUMM, SWIFT/BIC",
+				"www.bm.ru, Website",
+				"Subject to Directive 1, Executive Order 13662 Directive Determination -",
+				"044525219, BIK (RU)",
+				"Financial Institution, Target Type"},
+		},
+	}, noLogPipeliner)
+	dtcSearcher.DTCs = precomputeCSLEntities[csl.DTC]([]*csl.DTC{
+		{
+			EntityID:              "d44d88d0265d93927b9ff1c13bbbb7c7db64142c",
+			Name:                  "Yasmin Ahmed",
+			FederalRegisterNotice: "69 FR 17468",
+			SourceListURL:         "http://bit.ly/307FuRQ",
+			AlternateNames:        []string{"Yasmin Tariq", "Fatimah Mohammad"},
+			SourceInfoURL:         "http://bit.ly/307FuRQ",
+		},
+	}, noLogPipeliner)
+	cmicSearcher.CMICs = precomputeCSLEntities[csl.CMIC]([]*csl.CMIC{
+		{
+			EntityID:       "32091",
+			EntityNumber:   "32091",
+			Type:           "Entity",
+			Programs:       []string{"CMIC-EO13959"},
+			Name:           "PROVEN HONOUR CAPITAL LIMITED",
+			Addresses:      []string{"C/O Vistra Corporate Services Centre, Wickhams Cay II, Road Town, VG1110, VG"},
+			Remarks:        []string{"(Linked To: HUAWEI INVESTMENT & HOLDING CO., LTD.)"},
+			SourceListURL:  "https://bit.ly/1QWTIfE",
+			AlternateNames: []string{"PROVEN HONOUR CAPITAL LTD", "PROVEN HONOUR"},
+			SourceInfoURL:  "https://bit.ly/3zsMQ4n",
+			IDs: []string{"Proven Honour Capital Ltd, Issuer Name", "Proven Honour Capital Limited, Issuer Name", "XS1233275194, ISIN",
+				"HK0000216777, ISIN", "Private Company, Target Type", "XS1401816761, ISIN", "HK0000111952, ISIN", "03 Jun 2021, Listing Date (CMIC)",
+				"02 Aug 2021, Effective Date (CMIC)", "03 Jun 2022, Purchase/Sales For Divestment Date (CMIC)"},
+		},
+	}, noLogPipeliner)
+	ns_mbsSearcher.NS_MBSs = precomputeCSLEntities[csl.NS_MBS]([]*csl.NS_MBS{
+		{
+			EntityID:       "17016",
+			EntityNumber:   "17016",
+			Type:           "Entity",
+			Programs:       []string{"UKRAINE-EO13662", "MBS"},
+			Name:           "GAZPROMBANK JOINT STOCK COMPANY",
+			Addresses:      []string{"16 Nametkina Street, Bldg. 1, Moscow, 117420, RU"},
+			Remarks:        []string{"For more information on directives, please visit the following link: http://www.treasury.gov/resource-center/sanctions/Programs/Pages/ukraine.aspx#directives."},
+			AlternateNames: []string{"GAZPROMBANK OPEN JOINT STOCK COMPANY", "BANK GPB JSC", "GAZPROMBANK AO", "JOINT STOCK BANK OF THE GAS INDUSTRY GAZPROMBANK"},
+			SourceInfoURL:  "https://bit.ly/2MbsybU",
+			IDs: []string{"RU, 1027700167110, Registration Number", "RU, 09807684, Government Gazette Number", "RU, 7744001497, Tax ID No.",
+				"www.gazprombank.ru, Website", "GAZPRUMM, SWIFT/BIC", "Subject to Directive 1, Executive Order 13662 Directive Determination -",
+				"Subject to Directive 3 - All transactions in, provision of financing for, and other dealings in new debt of longer than 14 days maturity or new equity where such new debt or new equity is issued on or after the 'Effective Date (EO 14024 Directive)' associated with this name are prohibited., Executive Order 14024 Directive Information",
+				"31 Jul 1990, Organization Established Date", "24 Feb 2022, Listing Date (EO 14024 Directive 3):", "26 Mar 2022, Effective Date (EO 14024 Directive 3):",
+				"For more information on directives, please visit the following link: https://home.treasury.gov/policy-issues/financial-sanctions/sanctions-programs-and-country-information/russian-harmful-foreign-activities-sanctions#directives, Executive Order 14024 Directive Information -"},
+		},
+	}, noLogPipeliner)
 }
 
 func createTestSearcher(t *testing.T) *searcher {
@@ -215,6 +346,7 @@ func createTestSearcher(t *testing.T) *searcher {
 }
 
 func createBenchmarkSearcher(b *testing.B) *searcher {
+	b.Helper()
 	testSearcherOnce.Do(func() {
 		stats, err := testLiveSearcher.refreshData(filepath.Join("..", "..", "test", "testdata", "bench"))
 		if err != nil {
@@ -222,7 +354,33 @@ func createBenchmarkSearcher(b *testing.B) *searcher {
 		}
 		testSearcherStats = stats
 	})
+	verifyDownloadStats(b)
 	return testLiveSearcher
+}
+
+func verifyDownloadStats(b *testing.B) {
+	b.Helper()
+
+	// OFAC
+	require.Greater(b, testSearcherStats.SDNs, 1)
+	require.Greater(b, testSearcherStats.Alts, 1)
+	require.Greater(b, testSearcherStats.Addresses, 1)
+
+	// BIS
+	require.Greater(b, testSearcherStats.DeniedPersons, 1)
+
+	// CSL
+	require.Greater(b, testSearcherStats.BISEntities, 1)
+	require.Greater(b, testSearcherStats.MilitaryEndUsers, 1)
+	require.Greater(b, testSearcherStats.SectoralSanctions, 1)
+	require.Greater(b, testSearcherStats.Unverified, 1)
+	require.Greater(b, testSearcherStats.NonProliferationSanctions, 1)
+	require.Greater(b, testSearcherStats.ForeignSanctionsEvaders, 1)
+	require.Greater(b, testSearcherStats.PalestinianLegislativeCouncil, 1)
+	require.Greater(b, testSearcherStats.CAPTA, 1)
+	require.Greater(b, testSearcherStats.ITARDebarred, 1)
+	require.Greater(b, testSearcherStats.ChineseMilitaryIndustrialComplex, 1)
+	require.Greater(b, testSearcherStats.NonSDNMenuBasedSanctions, 1)
 }
 
 func TestJaroWinkler(t *testing.T) {
@@ -298,6 +456,20 @@ func TestJaroWinkler(t *testing.T) {
 		// Only need to call chomp on s1, see jaroWinkler doc
 		eql(t, fmt.Sprintf("#%d %s vs %s", i, v.s1, v.s2), jaroWinkler(v.s1, v.s2), v.match)
 	}
+}
+
+func TestJaroWinklerWithFavoritism(t *testing.T) {
+	favoritism := 1.0
+	delta := 0.01
+
+	score := jaroWinklerWithFavoritism("Vladimir Putin", "PUTIN, Vladimir Vladimirovich", favoritism)
+	require.InDelta(t, score, 1.00, delta)
+
+	score = jaroWinklerWithFavoritism("nicolas, maduro moros", "nicolás maduro", 0.25)
+	require.InDelta(t, score, 0.96, delta)
+
+	score = jaroWinklerWithFavoritism("Vladimir Putin", "A.I.C. SOGO KENKYUSHO", favoritism)
+	require.InDelta(t, score, 0.00, delta)
 }
 
 func TestJaroWinklerErr(t *testing.T) {

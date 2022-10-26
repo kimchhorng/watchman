@@ -33,6 +33,29 @@ var (
 
 func addSearchRoutes(logger log.Logger, r *mux.Router, searcher *searcher) {
 	r.Methods("GET").Path("/search").HandlerFunc(search(logger, searcher))
+	r.Methods("GET").Path("/search/us-csl").HandlerFunc(searchUSCSL(logger, searcher))
+}
+
+func extractSearchLimit(r *http.Request) int {
+	limit := softResultsLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, _ := strconv.Atoi(v)
+		if n > 0 {
+			limit = n
+		}
+	}
+	if limit > hardResultsLimit {
+		limit = hardResultsLimit
+	}
+	return limit
+}
+
+func extractSearchMinMatch(r *http.Request) float64 {
+	if v := r.URL.Query().Get("minMatch"); v != "" {
+		n, _ := strconv.ParseFloat(v, 64)
+		return n
+	}
+	return 0.00
 }
 
 func extractSearchLimit(r *http.Request) int {
@@ -155,9 +178,17 @@ type searchResponse struct {
 	DeniedPersons []DP `json:"deniedPersons"`
 
 	// Consolidated Screening List
-	BISEntities       []*Result[csl.EL]  `json:"bisEntities"`
-	MilitaryEndUsers  []*Result[csl.MEU] `json:"militaryEndUsers"`
-	SectoralSanctions []*Result[csl.SSI] `json:"sectoralSanctions"`
+	BISEntities                            []*Result[csl.EL]     `json:"bisEntities"`
+	MilitaryEndUsers                       []*Result[csl.MEU]    `json:"militaryEndUsers"`
+	SectoralSanctions                      []*Result[csl.SSI]    `json:"sectoralSanctions"`
+	Unverified                             []*Result[csl.UVL]    `json:"unverifiedCSL"`
+	NonproliferationSanctions              []*Result[csl.ISN]    `json:"nonproliferationSanctions"`
+	ForeignSanctionsEvaders                []*Result[csl.FSE]    `json:"foreignSanctionsEvaders"`
+	PalestinianLegislativeCouncil          []*Result[csl.PLC]    `json:"palestinianLegislativeCouncil"`
+	CaptaList                              []*Result[csl.CAP]    `json:"captaList"`
+	ITARDebarred                           []*Result[csl.DTC]    `json:"itarDebarred"`
+	NonSDNChineseMilitaryIndustrialComplex []*Result[csl.CMIC]   `json:"nonSDNChineseMilitaryIndustrialComplex"`
+	NonSDNMenuBasedSanctionsList           []*Result[csl.NS_MBS] `json:"nonSDNMenuBasedSanctionsList"`
 
 	// Metadata
 	RefreshedAt time.Time `json:"refreshedAt"`
@@ -252,7 +283,7 @@ func searchViaQ(logger log.Logger, searcher *searcher, name string) http.Handler
 type searchGather func(searcher *searcher, filters filterRequest, limit int, minMatch float64, name string, resp *searchResponse)
 
 var (
-	gatherings = []searchGather{
+	gatherings = append([]searchGather{
 		// OFAC SDN Search
 		func(s *searcher, filters filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			sdns := s.FindSDNsByRemarksID(limit, name)
@@ -274,8 +305,10 @@ var (
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.DeniedPersons = s.TopDPs(limit, minMatch, name)
 		},
+	}, cslGatherings...)
 
-		// Consolidated Screening List Results
+	// Consolidated Screening List Results
+	cslGatherings = []searchGather{
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.BISEntities = s.TopBISEntities(limit, minMatch, name)
 		},
@@ -285,18 +318,46 @@ var (
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.SectoralSanctions = s.TopSSIs(limit, minMatch, name)
 		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.Unverified = s.TopUVLs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.NonproliferationSanctions = s.TopISNs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.ForeignSanctionsEvaders = s.TopFSEs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.PalestinianLegislativeCouncil = s.TopPLCs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.CaptaList = s.TopCAPs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.ITARDebarred = s.TopDTCs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.NonSDNChineseMilitaryIndustrialComplex = s.TopCMICs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.NonSDNMenuBasedSanctionsList = s.TopNS_MBS(limit, minMatch, name)
+		},
 	}
 )
 
 func buildFullSearchResponse(searcher *searcher, filters filterRequest, limit int, minMatch float64, name string) *searchResponse {
+	return buildFullSearchResponseWith(searcher, gatherings, filters, limit, minMatch, name)
+}
+
+func buildFullSearchResponseWith(searcher *searcher, searchGatherings []searchGather, filters filterRequest, limit int, minMatch float64, name string) *searchResponse {
 	resp := searchResponse{
 		RefreshedAt: searcher.lastRefreshedAt,
 	}
 	var wg sync.WaitGroup
-	wg.Add(len(gatherings))
-	for i := range gatherings {
+	wg.Add(len(searchGatherings))
+	for i := range searchGatherings {
 		go func(i int) {
-			gatherings[i](searcher, filters, limit, minMatch, name, &resp)
+			searchGatherings[i](searcher, filters, limit, minMatch, name, &resp)
 			wg.Done()
 		}(i)
 	}

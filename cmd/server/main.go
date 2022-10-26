@@ -165,6 +165,14 @@ func main() {
 			"SSI":         log.Int(stats.SectoralSanctions),
 			"DPL":         log.Int(stats.DeniedPersons),
 			"BISEntities": log.Int(stats.BISEntities),
+			"UVL":         log.Int(stats.Unverified),
+			"ISN":         log.Int(stats.NonProliferationSanctions),
+			"FSE":         log.Int(stats.ForeignSanctionsEvaders),
+			"PLC":         log.Int(stats.PalestinianLegislativeCouncil),
+			"CAP":         log.Int(stats.CAPTA),
+			"DTC":         log.Int(stats.ITARDebarred),
+			"CMIC":        log.Int(stats.ChineseMilitaryIndustrialComplex),
+			"NS_MBS":      log.Int(stats.NonSDNMenuBasedSanctions),
 		}).Logf("data refreshed %v ago", time.Since(stats.RefreshedAt))
 	}
 
