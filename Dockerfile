@@ -1,11 +1,11 @@
-FROM golang:1.19-buster as backend
+FROM golang:1.21-bookworm as backend
 WORKDIR /go/src/github.com/moov-io/watchman
 RUN apt-get update && apt-get upgrade -y && apt-get install make gcc g++
 COPY . .
 RUN go mod download
 RUN make build-server
 
-FROM node:18-buster as frontend
+FROM node:21-bookworm as frontend
 COPY webui/ /watchman/
 WORKDIR /watchman/
 RUN npm install --legacy-peer-deps
@@ -22,6 +22,6 @@ ENV WEB_ROOT=/watchman/
 
 # USER moov # TODO(adam): non-root users
 
-EXPOSE 8080
-EXPOSE 9090
+EXPOSE 8084
+EXPOSE 9094
 ENTRYPOINT ["/bin/server"]

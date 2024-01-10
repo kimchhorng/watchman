@@ -46,6 +46,10 @@ var (
 	dtcSearcher       = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 	cmicSearcher      = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 	ns_mbsSearcher    = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+
+	eu_cslSearcher           = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	uk_cslSearcher           = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
+	uk_sanctionsListSearcher = newSearcher(log.NewNopLogger(), noLogPipeliner, 1)
 )
 
 func init() {
@@ -327,9 +331,42 @@ func init() {
 				"For more information on directives, please visit the following link: https://home.treasury.gov/policy-issues/financial-sanctions/sanctions-programs-and-country-information/russian-harmful-foreign-activities-sanctions#directives, Executive Order 14024 Directive Information -"},
 		},
 	}, noLogPipeliner)
+
+	eu_cslSearcher.EUCSL = precomputeCSLEntities[csl.EUCSLRecord]([]*csl.EUCSLRecord{{
+		FileGenerationDate:         "28/10/2022",
+		EntityLogicalID:            13,
+		EntityRemark:               "(UNSC RESOLUTION 1483)",
+		EntitySubjectType:          "person",
+		EntityPublicationURL:       "http://eur-lex.europa.eu/LexUriServ/LexUriServ.do?uri=OJ:L:2003:169:0006:0023:EN:PDF",
+		EntityReferenceNumber:      "",
+		NameAliasWholeNames:        []string{"Saddam Hussein Al-Tikriti", "Abu Ali", "Abou Ali"},
+		AddressCities:              []string{"test city"},
+		AddressStreets:             []string{"test street"},
+		AddressPoBoxes:             []string{"test po box"},
+		AddressZipCodes:            []string{"test zip"},
+		AddressCountryDescriptions: []string{"test country"},
+		BirthDates:                 []string{"1937-04-28"},
+		BirthCities:                []string{"al-Awja, near Tikrit"},
+		BirthCountries:             []string{"IRAQ"},
+		ValidFromTo:                map[string]string{"2022": "2030"},
+	}}, noLogPipeliner)
+
+	uk_cslSearcher.UKCSL = precomputeCSLEntities([]*csl.UKCSLRecord{{
+		Names:     []string{"'ABD AL-NASIR"},
+		Addresses: []string{"Tall 'Afar"},
+		GroupType: "Individual",
+		GroupID:   13720,
+	}}, noLogPipeliner)
+
+	uk_sanctionsListSearcher.UKSanctionsList = precomputeCSLEntities([]*csl.UKSanctionsListRecord{{
+		Names:     []string{"HAJI KHAIRULLAH HAJI SATTAR MONEY EXCHANGE"},
+		Addresses: []string{"Branch Office 2, Peshawar, Khyber Paktunkhwa Province, Pakistan"},
+		UniqueID:  "AFG0001",
+	}}, noLogPipeliner)
 }
 
 func createTestSearcher(t *testing.T) *searcher {
+	t.Setenv("WITH_UK_SANCTIONS_LIST", "false")
 	if testing.Short() {
 		t.Skip("-short enabled")
 	}
@@ -381,80 +418,121 @@ func verifyDownloadStats(b *testing.B) {
 	require.Greater(b, testSearcherStats.ITARDebarred, 1)
 	require.Greater(b, testSearcherStats.ChineseMilitaryIndustrialComplex, 1)
 	require.Greater(b, testSearcherStats.NonSDNMenuBasedSanctions, 1)
+
+	// EU - CSL
+	require.Greater(b, testSearcherStats.EUCSL, 1)
+	// UK - CSL
+	require.Greater(b, testSearcherStats.UKCSL, 1)
+	// UK - SanctionsList
+	require.Greater(b, testSearcherStats.UKSanctionsList, 1)
 }
 
 func TestJaroWinkler(t *testing.T) {
 	cases := []struct {
-		s1, s2 string
-		match  float64
+		indexed, search string
+		match           float64
 	}{
-		{"wei, zhao", "wei, Zhao", 0.917},
+		// examples
+		{"wei, zhao", "wei, Zhao", 0.875},
 		{"WEI, Zhao", "WEI, Zhao", 1.0},
 		{"WEI Zhao", "WEI Zhao", 1.0},
 		{strings.ToLower("WEI Zhao"), precompute("WEI, Zhao"), 1.0},
-		// make sure jaroWinkler is communative
-		{"jane doe", "jan lahore", 0.721},
-		{"jan lahore", "jane doe", 0.776},
+
+		// apply jaroWinkler in both directions
+		{"jane doe", "jan lahore", 0.596},
+		{"jan lahore", "jane doe", 0.596},
+
 		// real world case
-		{"john doe", "paul john", 0.764},
-		{"john doe", "john othername", 0.815},
+		{"john doe", "paul john", 0.533},
+		{"john doe", "john othername", 0.672},
+
 		// close match
-		{"jane doe", "jane doe2", 0.971},
+		{"jane doe", "jane doe2", 0.940},
+
 		// real-ish world examples
-		{"kalamity linden", "kala limited", 0.771},
-		{"kala limited", "kalamity linden", 0.795},
+		{"kalamity linden", "kala limited", 0.687},
+		{"kala limited", "kalamity linden", 0.687},
+
 		// examples used in demos / commonly
 		{"nicolas", "nicolas", 1.0},
-		{"nicolas moros maduro", "nicolas maduro", 0.91},
-		{"nicolas maduro", "nicolas moros maduro", 1.0},
+		{"nicolas moros maduro", "nicolas maduro", 0.958},
+		{"nicolas maduro", "nicolas moros maduro", 0.839},
+
+		// customer examples
+		{"ian", "ian mckinley", 0.429},
+		{"iap", "ian mckinley", 0.352},
+		{"ian mckinley", "ian", 0.891},
+		{"ian mckinley", "iap", 0.733},
+		{"ian mckinley", "tian xiang 7", 0.526},
+		{"bindaree food group pty", precompute("independent insurance group ltd"), 0.576}, // precompute removes ltd
+		{"bindaree food group pty ltd", "independent insurance group ltd", 0.631},         // only matches higher from 'ltd'
+		{"p.c.c. (singapore) private limited", "culver max entertainment private limited", 0.658},
+		{"zincum llc", "easy verification inc.", 0.380},
+		{"transpetrochart co ltd", "jx metals trading co.", 0.496},
+		{"technolab", "moomoo technologies inc", 0.565},
+		{"sewa security services", "sesa - safety & environmental services australia pty ltd", 0.480},
+		{"bueno", "20/f rykadan capital twr135 hoi bun rd, kwun tong 135 hoi bun rd., kwun tong", 0.094},
+
 		// example cases
-		{"nicolas maduro", "nicolás maduro", 0.961},
+		{"nicolas maduro", "nicolás maduro", 0.937},
 		{"nicolas maduro", precompute("nicolás maduro"), 1.0},
+		{"nic maduro", "nicolas maduro", 0.872},
+		{"nick maduro", "nicolas maduro", 0.859},
+		{"nicolas maduroo", "nicolas maduro", 0.966},
 		{"nicolas maduro", "nicolas maduro", 1.0},
 		{"maduro, nicolas", "maduro, nicolas", 1.0},
 		{"maduro moros, nicolas", "maduro moros, nicolas", 1.0},
-		{"maduro moros, nicolas", "nicolas maduro", 0.889},
-		{"nicolas maduro moros", "maduro", 0.722},
-		{"nicolas maduro moros", "nicolás maduro", 0.884},
-		{"nicolas, maduro moros", "maduro", 0.720},
-		{"nicolas, maduro moros", "nicolas maduro", 0.902},
-		{"nicolas, maduro moros", "nicolás", 0.627},
-		{"nicolas, maduro moros", "maduro", 0.720},
-		{"nicolas, maduro moros", "nicolás maduro", 0.877},
-		{"africada financial services bureau change", "skylight", 0.352},
-		{"africada financial services bureau change", "skylight financial inc", 0.72},
-		{"africada financial services bureau change", "skylight services inc", 0.806},
-		{"africada financial services bureau change", "skylight financial services", 0.887},
-		{"africada financial services bureau change", "skylight financial services inc", 0.79},
+		{"maduro moros, nicolas", "nicolas maduro", 0.953},
+		{"nicolas maduro moros", "maduro", 0.900},
+		{"nicolas maduro moros", "nicolás maduro", 0.898},
+		{"nicolas, maduro moros", "maduro", 0.897},
+		{"nicolas, maduro moros", "nicolas maduro", 0.928},
+		{"nicolas, maduro moros", "nicolás", 0.822},
+		{"nicolas, maduro moros", "maduro", 0.897},
+		{"nicolas, maduro moros", "nicolás maduro", 0.906},
+		{"africada financial services bureau change", "skylight", 0.441},
+		{"africada financial services bureau change", "skylight financial inc", 0.658},
+		{"africada financial services bureau change", "skylight services inc", 0.621},
+		{"africada financial services bureau change", "skylight financial services", 0.761},
+		{"africada financial services bureau change", "skylight financial services inc", 0.730},
 
 		// stopwords tests
-		{"the group for the preservation of the holy sites", "the bridgespan group", 1.00},
-		{precompute("the group for the preservation of the holy sites"), precompute("the bridgespan group"), 1.00},
-		{"group preservation holy sites", "bridgespan group", 0.689},
-		{"the group for the preservation of the holy sites", "the logan group", 1.00},
-		{precompute("the group for the preservation of the holy sites"), precompute("the logan group"), 1.00},
-		{"group preservation holy sites", "logan group", 0.478},
-		{"the group for the preservation of the holy sites", "the anything group", 1.00},
-		{precompute("the group for the preservation of the holy sites"), precompute("the anything group"), 1.00},
-		{"group preservation holy sites", "anything group", 0.617},
-		{"the group for the preservation of the holy sites", "the hello world group", 1.00},
-		{precompute("the group for the preservation of the holy sites"), precompute("the hello world group"), 1.00},
-		{"group preservation holy sites", "hello world group", 0.687},
-		{"the group for the preservation of the holy sites", "the group", 0.67},
-		{precompute("the group for the preservation of the holy sites"), precompute("the group"), 0.67},
-		{"group preservation holy sites", "group", 0.460},
-		{"the group for the preservation of the holy sites", "The flibbity jibbity flobbity jobbity grobbity zobbity group", 0.699},
-		{precompute("the group for the preservation of the holy sites"), precompute("the flibbity jibbity flobbity jobbity grobbity zobbity group"), .783},
-		{"group preservation holy sites", "flibbity jibbity flobbity jobbity grobbity zobbity group", 0.590},
+		{"the group for the preservation of the holy sites", "the bridgespan group", 0.682},
+		{precompute("the group for the preservation of the holy sites"), precompute("the bridgespan group"), 0.682},
+		{"group preservation holy sites", "bridgespan group", 0.652},
+
+		{"the group for the preservation of the holy sites", "the logan group", 0.730},
+		{precompute("the group for the preservation of the holy sites"), precompute("the logan group"), 0.730},
+		{"group preservation holy sites", "logan group", 0.649},
+
+		{"the group for the preservation of the holy sites", "the anything group", 0.698},
+		{precompute("the group for the preservation of the holy sites"), precompute("the anything group"), 0.698},
+		{"group preservation holy sites", "anything group", 0.585},
+
+		{"the group for the preservation of the holy sites", "the hello world group", 0.706},
+		{precompute("the group for the preservation of the holy sites"), precompute("the hello world group"), 0.706},
+		{"group preservation holy sites", "hello world group", 0.560},
+
+		{"the group for the preservation of the holy sites", "the group", 0.880},
+		{precompute("the group for the preservation of the holy sites"), precompute("the group"), 0.880},
+		{"group preservation holy sites", "group", 0.879},
+
+		{"the group for the preservation of the holy sites", "The flibbity jibbity flobbity jobbity grobbity zobbity group", 0.426},
+		{
+			precompute("the group for the preservation of the holy sites"),
+			precompute("the flibbity jibbity flobbity jobbity grobbity zobbity group"),
+			0.446,
+		},
+		{"group preservation holy sites", "flibbity jibbity flobbity jobbity grobbity zobbity group", 0.334},
 
 		// precompute
-		{"i c sogo kenkyusho", precompute("A.I.C. SOGO KENKYUSHO"), 0.667},
-		{precompute("A.I.C. SOGO KENKYUSHO"), "sogo kenkyusho", 0.667},
+		{"i c sogo kenkyusho", precompute("A.I.C. SOGO KENKYUSHO"), 0.858},
+		{precompute("A.I.C. SOGO KENKYUSHO"), "sogo kenkyusho", 0.972},
 	}
 	for i := range cases {
 		v := cases[i]
 		// Only need to call chomp on s1, see jaroWinkler doc
-		eql(t, fmt.Sprintf("#%d %s vs %s", i, v.s1, v.s2), jaroWinkler(v.s1, v.s2), v.match)
+		eql(t, fmt.Sprintf("#%d %s vs %s", i, v.indexed, v.search), bestPairsJaroWinkler(strings.Fields(v.search), v.indexed), v.match)
 	}
 }
 
@@ -503,9 +581,11 @@ func TestSearch_liveData(t *testing.T) {
 		name  string
 		match float64 // top match %
 	}{
-		{"Nicolas MADURO", 0.932},
-		{"nicolas maduro", 0.932},
+		{"Nicolas MADURO", 0.958},
+		{"nicolas maduro", 0.958},
+		{"NICOLAS maduro", 0.958},
 	}
+
 	keeper := keepSDN(filterRequest{})
 	for i := range cases {
 		sdns := searcher.TopSDNs(1, 0.00, cases[i].name, keeper)
@@ -673,9 +753,7 @@ func TestSearch__TopSDNs(t *testing.T) {
 	if len(sdns) == 0 {
 		t.Fatal("empty SDNs")
 	}
-	if sdns[0].EntityID != "2676" {
-		t.Errorf("%#v", sdns[0].SDN)
-	}
+	require.Equal(t, "2676", sdns[0].EntityID)
 }
 
 func TestSearch__TopDPs(t *testing.T) {
