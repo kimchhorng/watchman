@@ -61,28 +61,6 @@ func extractSearchMinMatch(r *http.Request) float64 {
 	return 0.00
 }
 
-func extractSearchLimit(r *http.Request) int {
-	limit := softResultsLimit
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, _ := strconv.Atoi(v)
-		if n > 0 {
-			limit = n
-		}
-	}
-	if limit > hardResultsLimit {
-		limit = hardResultsLimit
-	}
-	return limit
-}
-
-func extractSearchMinMatch(r *http.Request) float64 {
-	if v := r.URL.Query().Get("minMatch"); v != "" {
-		n, _ := strconv.ParseFloat(v, 64)
-		return n
-	}
-	return 0.00
-}
-
 type addressSearchRequest struct {
 	Address    string `json:"address"`
 	City       string `json:"city"`

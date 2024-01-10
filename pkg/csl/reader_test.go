@@ -175,17 +175,6 @@ func Test_unmarshalUVL(t *testing.T) {
 	if !reflect.DeepEqual(expectedUVL, actualUVL) {
 		t.Errorf("Expected: %#v\nFound: %#v\n", expectedUVL, actualUVL)
 	}
-	if len(csl.ELs) != 1 {
-		t.Fatalf("unexpected: %#v", csl.ELs)
-	}
-
-	// Compare the EntityList item
-	el := csl.ELs[0]
-	assert.Equal(t, el.ID, "764ecc9bd00a36930e6bfba2e65ffe3f8e96a123")
-	assert.Equal(t, el.Name, "Huawei Cloud Beijing")
-	assert.Empty(t, el.AlternateNames)
-	assert.Equal(t, el.Addresses, []string{"Beijing, CN"})
-	assert.Equal(t, el.StartDate, "2020-08-20")
 }
 
 func Test_unmarshalISN(t *testing.T) {

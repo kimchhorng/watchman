@@ -384,10 +384,6 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 		return stats, stats
 	}
 
-	if len(stats.Errors) > 0 {
-		return stats, stats
-	}
-
 	// Set new records after precomputation (to minimize lock contention)
 	s.Lock()
 	// OFAC
