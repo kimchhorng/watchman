@@ -6,7 +6,6 @@ package main
 
 import (
 	"bytes"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -41,10 +40,9 @@ var (
 
 func init() {
 	maxWorkers, err := strconv.ParseInt(strx.Or(os.Getenv("WEBHOOK_MAX_WORKERS"), "10"), 10, 32)
-	if err != nil {
-		panic(fmt.Sprintf("ERROR reading WEBHOOK_MAX_WORKERS: %v", err))
+	if err == nil {
+		webhookGate = syncutil.NewGate(int(maxWorkers))
 	}
-	webhookGate = syncutil.NewGate(int(maxWorkers))
 }
 
 // callWebhook will take `body` as JSON and make a POST request to the provided webhook url.
@@ -65,8 +63,10 @@ func callWebhook(body *bytes.Buffer, webhook string, authToken string) (int, err
 	}
 
 	// Guard HTTP calls in-flight
-	webhookGate.Start()
-	defer webhookGate.Done()
+	if webhookGate != nil {
+		webhookGate.Start()
+		defer webhookGate.Done()
+	}
 
 	resp, err := webhookHTTPClient.Do(req)
 	if resp == nil || err != nil {
@@ -98,28 +98,4 @@ func validateWebhook(raw string) (string, error) {
 		return "", fmt.Errorf("%s is not an HTTPS url", u.String())
 	}
 	return u.String(), nil
-}
-
-type webhookRepository interface {
-	recordWebhook(watchID string, attemptedAt time.Time, status int) error
-}
-
-type sqliteWebhookRepository struct {
-	db *sql.DB
-}
-
-func (r *sqliteWebhookRepository) close() error {
-	return r.db.Close()
-}
-
-func (r *sqliteWebhookRepository) recordWebhook(watchID string, attemptedAt time.Time, status int) error {
-	query := `insert into webhook_stats (watch_id, attempted_at, status) values (?, ?, ?);`
-	stmt, err := r.db.Prepare(query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(watchID, attemptedAt, status)
-	return err
 }

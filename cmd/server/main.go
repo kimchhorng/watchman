@@ -122,7 +122,12 @@ func main() {
 	}
 
 	// Start Admin server (with Prometheus metrics)
-	adminServer := admin.NewServer(*adminAddr)
+	adminServer, err := admin.New(admin.Opts{
+		Addr: *adminAddr,
+	})
+	if err != nil {
+		errs <- fmt.Errorf("problem starting admin server: %v", err)
+	}
 	adminServer.AddVersionHandler(watchman.Version) // Setup 'GET /version'
 	go func() {
 		logger.Logf("listening on %s", adminServer.BindAddr())
@@ -159,34 +164,25 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info().With(log.Fields{
-			"SDNs":        log.Int(stats.SDNs),
-			"AltNames":    log.Int(stats.Alts),
-			"Addresses":   log.Int(stats.Addresses),
-			"SSI":         log.Int(stats.SectoralSanctions),
-			"DPL":         log.Int(stats.DeniedPersons),
-			"BISEntities": log.Int(stats.BISEntities),
-			"UVL":         log.Int(stats.Unverified),
-			"ISN":         log.Int(stats.NonProliferationSanctions),
-			"FSE":         log.Int(stats.ForeignSanctionsEvaders),
-			"PLC":         log.Int(stats.PalestinianLegislativeCouncil),
-			"CAP":         log.Int(stats.CAPTA),
-			"DTC":         log.Int(stats.ITARDebarred),
-			"CMIC":        log.Int(stats.ChineseMilitaryIndustrialComplex),
-			"NS_MBS":      log.Int(stats.NonSDNMenuBasedSanctions),
+			"SDNs":             log.Int(stats.SDNs),
+			"AltNames":         log.Int(stats.Alts),
+			"Addresses":        log.Int(stats.Addresses),
+			"SSI":              log.Int(stats.SectoralSanctions),
+			"DPL":              log.Int(stats.DeniedPersons),
+			"BISEntities":      log.Int(stats.BISEntities),
+			"UVL":              log.Int(stats.Unverified),
+			"ISN":              log.Int(stats.NonProliferationSanctions),
+			"FSE":              log.Int(stats.ForeignSanctionsEvaders),
+			"PLC":              log.Int(stats.PalestinianLegislativeCouncil),
+			"CAP":              log.Int(stats.CAPTA),
+			"DTC":              log.Int(stats.ITARDebarred),
+			"CMIC":             log.Int(stats.ChineseMilitaryIndustrialComplex),
+			"NS_MBS":           log.Int(stats.NonSDNMenuBasedSanctions),
+			"EU_CSL":           log.Int(stats.EUCSL),
+			"UK_CSL":           log.Int(stats.UKCSL),
+			"UK_SanctionsList": log.Int(stats.UKSanctionsList),
 		}).Logf("data refreshed %v ago", time.Since(stats.RefreshedAt))
 	}
-
-	// Setup Watch and Webhook database wrapper
-	watchRepo := &sqliteWatchRepository{db, logger}
-	defer watchRepo.close()
-	webhookRepo := &sqliteWebhookRepository{db}
-	defer webhookRepo.close()
-
-	// Setup company / customer repositories
-	companyRepo := &sqliteCompanyRepository{db, logger}
-	defer companyRepo.close()
-	custRepo := &sqliteCustomerRepository{db, logger}
-	defer custRepo.close()
 
 	// Setup periodic download and re-search
 	updates := make(chan *DownloadStats)
@@ -194,15 +190,12 @@ func main() {
 	go searcher.periodicDataRefresh(dataRefreshInterval, downloadRepo, updates)
 	go handleDownloadStats(updates, func(stats *DownloadStats) {
 		callDownloadWebook(logger, stats)
-		searcher.spawnResearching(logger, companyRepo, custRepo, watchRepo, webhookRepo)
 	})
 
 	// Add manual data refresh endpoint
 	adminServer.AddHandler(manualRefreshPath, manualRefreshHandler(logger, searcher, updates, downloadRepo))
 
 	// Add searcher for HTTP routes
-	addCompanyRoutes(logger, router, searcher, companyRepo, watchRepo)
-	addCustomerRoutes(logger, router, searcher, custRepo, watchRepo)
 	addSDNRoutes(logger, router, searcher)
 	addSearchRoutes(logger, router, searcher)
 	addDownloadRoutes(logger, router, downloadRepo)

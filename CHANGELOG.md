@@ -1,3 +1,100 @@
+## v0.27.0 (Released 2023-12-14)
+
+This release of Watchman includes additional improvements to the search match scores to [reduce false positives and increase true positive matches](https://github.com/moov-io/watchman/pull/524#issue-2031927107). A few of the specific improvements are:
+
+1. Compare tokens in the search to the index tokens
+   - i.e. "find matches for every search token" rather than "find match for every indexed token"
+   - Improves scores of searches that don't include "middle" names
+   - Prevents sanctioned names that are 1 word (HADI, EMMA, KAMILA) matching long searches
+   - Has a side-effect that short search terms will have more false positives. I think this is a good trade off as the sanction lists will always contain the full name, but the search might not
+2. Once a token has matched something, it can't match a different token
+   - This prevents names with repeated words having artificially high scores
+   - e.g. prevents any search containing "Vladimir" matching "VLADIMIROV, Vladimir Vladimirovich"
+3. Weights each word-score by the length of the word, relative to the search and indexed name
+   - This corrects for error that is introduced by splitting names into tokens and doing piecewise Jaro-Winkler scoring
+   - Combing word-scores using a simple average gives short words (like Li, Al) equal weight to much longer words
+   - The length-weighted scores are comparable to what you get by doing whole-name to whole-name Jaro-Winkler comparison
+4. Punishes word-scores when the matching tokens have significantly different length
+5. Punishes word-scores when the matching tokens start with different letters
+
+## v0.26.1 (Released 2023-11-20)
+
+This release of Watchman has removed Company/Customer models and Watches. They've been deprecated for a while and do not perform as users expect. Stay tuned for a future Moov OSS project integrating with Watchman for sanctions screening.
+
+IMPROVEMENTS
+
+- feat: return matchedName in non-OFAC results
+- search: apply more edge case logic to decrease bad scoring
+- search: return matchedName for OFAC SDNs, Alts, and DPL records
+- test: remove duplicate (and skipped) UK/EU CSL tests
+
+## v0.25.0 (Released 2023-11-15)
+
+This release of Watchman lowers most match percentages by comparing names better.
+
+IMPROVEMENTS
+
+- fix: close xml encoder
+- fix: panic cleanup from newer linter rules
+- cmd/server: only check adjacent terms for local jaro max score
+- cmd/server: read ADJACENT_SIMILARITY_POSITIONS env var
+- cmd/server: weight term score by length similarity
+
+BUILD
+
+- build: bump numerous javascript dependencies
+- build: update to Go 1.21
+- build: update to node 20
+- build: update Debian, Fedora, node, and Go base images
+
+## v0.24.2 (Released 2023-04-03)
+
+IMPROVEMENTS
+
+- fix: keep numbers during stopwords step
+- fix: stop setting level=error for info logs
+
+BUILD
+
+- bump golang.org/x/crypto to v0.6.0
+- bump golang.org/x/net from 0.6.0 to 0.7.0
+- build(deps): bump activesupport from 6.1.7.2 to 7.0.4.3 in /docs
+- build(deps): bump webpack from 5.75.0 to 5.76.1 in /webui
+
+## v0.24.1 (Released 2023-02-16)
+
+IMPROVEMENTS
+
+- fix: filter SDNs in async search rather than truncate
+
+BUILD
+
+- build: update Go dependencies
+- docs: bundle update
+- webui: npm audit fix
+
+## v0.24.0 (Released 2023-02-02)
+
+ADDITIONS
+
+- search: Add the EU Consolidated Screening List
+- search: Add the UK Consolidated Screening List
+
+IMPROVEMENTS
+
+- feat: log status after download
+- fix: guard around race condition in pkg/download
+- fix: cap match percentage
+
+BUILD
+
+- build: upgrade golang to 1.20
+- build: try using hashicorp-forge/go-test-split-action to speedup tests
+- build(deps): bump activesupport from 6.0.3.4 to 6.0.6.1 in /docs
+- build(deps): bump json5 from 1.0.1 to 1.0.2 in /webui
+- build(deps): bump loader-utils from 2.0.0 to 2.0.4 in /webui
+- build(deps): bump nokogiri from 1.13.6 to 1.13.9 in /docs
+
 ## v0.23.1 (Released 2022-10-17)
 
 IMPROVEMENTS
