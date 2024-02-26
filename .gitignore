@@ -17,6 +17,7 @@ coverage.txt
 
 /bin/
 /lint-project.sh
+/gitleaks.tar.gz
 misspell*
 staticcheck*
 
@@ -29,3 +30,5 @@ openapi-generator*jar
 
 webui/build/
 webui/node_modules/
+
+makefile.dev

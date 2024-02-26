@@ -10,8 +10,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	moovhttp "github.com/moov-io/base/http"
@@ -59,9 +60,26 @@ type DownloadStats struct {
 	DeniedPersons int `json:"deniedPersons"`
 
 	// Consolidated Screening List (CSL)
-	BISEntities       int `json:"bisEntities"`
-	MilitaryEndUsers  int `json:"militaryEndUsers"`
-	SectoralSanctions int `json:"sectoralSanctions"`
+	BISEntities                      int `json:"bisEntities"`
+	MilitaryEndUsers                 int `json:"militaryEndUsers"`
+	SectoralSanctions                int `json:"sectoralSanctions"`
+	Unverified                       int `json:"unverifiedCSL"`
+	NonProliferationSanctions        int `json:"nonProliferationSanctions"`
+	ForeignSanctionsEvaders          int `json:"foreignSanctionsEvaders"`
+	PalestinianLegislativeCouncil    int `json:"palestinianLegislativeCouncil"`
+	CAPTA                            int `json:"CAPTA"`
+	ITARDebarred                     int `json:"ITARDebarred"`
+	ChineseMilitaryIndustrialComplex int `json:"chineseMilitaryIndustrialComplex"`
+	NonSDNMenuBasedSanctions         int `json:"nonSDNMenuBasedSanctions"`
+
+	// EU Consolidated Sanctions List
+	EUCSL int `json:"europeanSanctionsList"`
+
+	// UK Consolidated Sanctions List
+	UKCSL int `json:"ukConsolidatedSanctionsList"`
+
+	// UK Sanctions List
+	UKSanctionsList int `json:"ukSanctionsList"`
 
 	Errors      []error   `json:"-"`
 	RefreshedAt time.Time `json:"timestamp"`
@@ -120,9 +138,19 @@ func (s *searcher) periodicDataRefresh(interval time.Duration, downloadRepo down
 					"BISEntities":      log.Int(stats.BISEntities),
 					"MilitaryEndUsers": log.Int(stats.MilitaryEndUsers),
 					"SSI":              log.Int(stats.SectoralSanctions),
+					"UVL":              log.Int(stats.Unverified),
+					"ISN":              log.Int(stats.NonProliferationSanctions),
+					"FSE":              log.Int(stats.ForeignSanctionsEvaders),
+					"PLC":              log.Int(stats.PalestinianLegislativeCouncil),
+					"CAP":              log.Int(stats.CAPTA),
+					"DTC":              log.Int(stats.ITARDebarred),
+					"CMIC":             log.Int(stats.ChineseMilitaryIndustrialComplex),
+					"NS_MBS":           log.Int(stats.NonSDNMenuBasedSanctions),
+					"EU_CSL":           log.Int(stats.EUCSL),
+					"UK_CSL":           log.Int(stats.UKCSL),
 				}).Logf("data refreshed %v ago", time.Since(stats.RefreshedAt))
 			}
-			updates <- stats // send stats for re-search and watch notifications
+			updates <- stats // send stats back
 		}
 	}
 }
@@ -174,7 +202,7 @@ func dplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
 func cslRecords(logger log.Logger, initialDir string) (*csl.CSL, error) {
 	file, err := csl.Download(logger, initialDir)
 	if err != nil {
-		logger.Warn().LogErrorf("skipping CSL download: %v", err)
+		logger.Warn().Logf("skipping CSL download: %v", err)
 		return &csl.CSL{}, nil
 	}
 	cslRecords, err := csl.ReadFile(file)
@@ -182,6 +210,49 @@ func cslRecords(logger log.Logger, initialDir string) (*csl.CSL, error) {
 		return nil, err
 	}
 	return cslRecords, err
+}
+
+func euCSLRecords(logger log.Logger, initialDir string) ([]*csl.EUCSLRecord, error) {
+	file, err := csl.DownloadEU(logger, initialDir)
+	if err != nil {
+		logger.Warn().Logf("skipping EU CSL download: %v", err)
+		// no error to return because we skip the download
+		return nil, nil
+	}
+	cslRecords, _, err := csl.ReadEUFile(file)
+	if err != nil {
+		return nil, err
+	}
+	return cslRecords, err
+}
+
+func ukCSLRecords(logger log.Logger, initialDir string) ([]*csl.UKCSLRecord, error) {
+	file, err := csl.DownloadUKCSL(logger, initialDir)
+	if err != nil {
+		logger.Warn().Logf("skipping UK CSL download: %v", err)
+		// no error to return because we skip the download
+		return nil, nil
+	}
+	cslRecords, _, err := csl.ReadUKCSLFile(file)
+	if err != nil {
+		return nil, err
+	}
+	return cslRecords, err
+}
+
+func ukSanctionsListRecords(logger log.Logger, initialDir string) ([]*csl.UKSanctionsListRecord, error) {
+	file, err := csl.DownloadUKSanctionsList(logger, initialDir)
+	if err != nil {
+		logger.Warn().Logf("skipping UK Sanctions List download: %v", err)
+		// no error to return because we skip the download
+		return nil, nil
+	}
+
+	records, _, err := csl.ReadUKSanctionsListFile(file)
+	if err != nil {
+		return nil, err
+	}
+	return records, err
 }
 
 // refreshData reaches out to the various websites to download the latest
@@ -218,6 +289,37 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 	}
 	dps := precomputeDPs(deniedPersons, s.pipe)
 
+	euConsolidatedList, err := euCSLRecords(s.logger, initialDir)
+	if err != nil {
+		lastDataRefreshFailure.WithLabelValues("EUCSL").Set(float64(time.Now().Unix()))
+		stats.Errors = append(stats.Errors, fmt.Errorf("EUCSL: %v", err))
+	}
+
+	euCSLs := precomputeCSLEntities[csl.EUCSLRecord](euConsolidatedList, s.pipe)
+
+	ukConsolidatedList, err := ukCSLRecords(s.logger, initialDir)
+	if err != nil {
+		lastDataRefreshFailure.WithLabelValues("UKCSL").Set(float64(time.Now().Unix()))
+		stats.Errors = append(stats.Errors, fmt.Errorf("UKCSL: %v", err))
+	}
+
+	ukCSLs := precomputeCSLEntities[csl.UKCSLRecord](ukConsolidatedList, s.pipe)
+
+	var ukSLs []*Result[csl.UKSanctionsListRecord]
+	withSanctionsList := os.Getenv("WITH_UK_SANCTIONS_LIST")
+	if strings.ToLower(withSanctionsList) == "true" {
+		ukSanctionsList, err := ukSanctionsListRecords(s.logger, initialDir)
+		if err != nil {
+			lastDataRefreshFailure.WithLabelValues("UKSanctionsList").Set(float64(time.Now().Unix()))
+			stats.Errors = append(stats.Errors, fmt.Errorf("UKSanctionsList: %v", err))
+		}
+		ukSLs = precomputeCSLEntities[csl.UKSanctionsListRecord](ukSanctionsList, s.pipe)
+
+		stats.UKSanctionsList = len(ukSLs)
+		lastDataRefreshCount.WithLabelValues("UKSL").Set(float64(len(ukSLs)))
+	}
+
+	// csl records from US downloaded here
 	consolidatedLists, err := cslRecords(s.logger, initialDir)
 	if err != nil {
 		lastDataRefreshFailure.WithLabelValues("CSL").Set(float64(time.Now().Unix()))
@@ -226,6 +328,14 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 	els := precomputeCSLEntities[csl.EL](consolidatedLists.ELs, s.pipe)
 	meus := precomputeCSLEntities[csl.MEU](consolidatedLists.MEUs, s.pipe)
 	ssis := precomputeCSLEntities[csl.SSI](consolidatedLists.SSIs, s.pipe)
+	uvls := precomputeCSLEntities[csl.UVL](consolidatedLists.UVLs, s.pipe)
+	isns := precomputeCSLEntities[csl.ISN](consolidatedLists.ISNs, s.pipe)
+	fses := precomputeCSLEntities[csl.FSE](consolidatedLists.FSEs, s.pipe)
+	plcs := precomputeCSLEntities[csl.PLC](consolidatedLists.PLCs, s.pipe)
+	caps := precomputeCSLEntities[csl.CAP](consolidatedLists.CAPs, s.pipe)
+	dtcs := precomputeCSLEntities[csl.DTC](consolidatedLists.DTCs, s.pipe)
+	cmics := precomputeCSLEntities[csl.CMIC](consolidatedLists.CMICs, s.pipe)
+	ns_mbss := precomputeCSLEntities[csl.NS_MBS](consolidatedLists.NS_MBSs, s.pipe)
 
 	// OFAC
 	stats.SDNs = len(sdns)
@@ -237,6 +347,19 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 	stats.BISEntities = len(els)
 	stats.MilitaryEndUsers = len(meus)
 	stats.SectoralSanctions = len(ssis)
+	stats.Unverified = len(uvls)
+	stats.NonProliferationSanctions = len(isns)
+	stats.ForeignSanctionsEvaders = len(fses)
+	stats.PalestinianLegislativeCouncil = len(plcs)
+	stats.CAPTA = len(caps)
+	stats.ITARDebarred = len(dtcs)
+	stats.ChineseMilitaryIndustrialComplex = len(cmics)
+	stats.NonSDNMenuBasedSanctions = len(ns_mbss)
+	// EU - CSL
+	stats.EUCSL = len(euCSLs)
+
+	// UK - CSL
+	stats.UKCSL = len(ukCSLs)
 
 	// record prometheus metrics
 	lastDataRefreshCount.WithLabelValues("SDNs").Set(float64(len(sdns)))
@@ -244,6 +367,18 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 	lastDataRefreshCount.WithLabelValues("BISEntities").Set(float64(len(els)))
 	lastDataRefreshCount.WithLabelValues("MilitaryEndUsers").Set(float64(len(meus)))
 	lastDataRefreshCount.WithLabelValues("DPs").Set(float64(len(dps)))
+	lastDataRefreshCount.WithLabelValues("UVLs").Set(float64(len(uvls)))
+	lastDataRefreshCount.WithLabelValues("ISNs").Set(float64(len(isns)))
+	lastDataRefreshCount.WithLabelValues("FSEs").Set(float64(len(fses)))
+	lastDataRefreshCount.WithLabelValues("PLCs").Set(float64(len(plcs)))
+	lastDataRefreshCount.WithLabelValues("CAPs").Set(float64(len(caps)))
+	lastDataRefreshCount.WithLabelValues("DTCs").Set(float64(len(dtcs)))
+	lastDataRefreshCount.WithLabelValues("CMICs").Set(float64(len(cmics)))
+	lastDataRefreshCount.WithLabelValues("NS_MBSs").Set(float64(len(ns_mbss)))
+	// EU CSL
+	lastDataRefreshCount.WithLabelValues("EUCSL").Set(float64(len(euCSLs)))
+	// UK CSL
+	lastDataRefreshCount.WithLabelValues("UKCSL").Set(float64(len(ukCSLs)))
 
 	if len(stats.Errors) > 0 {
 		return stats, stats
@@ -261,6 +396,19 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 	s.BISEntities = els
 	s.MilitaryEndUsers = meus
 	s.SSIs = ssis
+	s.UVLs = uvls
+	s.ISNs = isns
+	s.FSEs = fses
+	s.PLCs = plcs
+	s.CAPs = caps
+	s.DTCs = dtcs
+	s.CMICs = cmics
+	s.NS_MBSs = ns_mbss
+	//EUCSL
+	s.EUCSL = euCSLs
+	//UKCSL
+	s.UKCSL = ukCSLs
+	s.UKSanctionsList = ukSLs
 	// metadata
 	s.lastRefreshedAt = stats.RefreshedAt
 	s.Unlock()
@@ -281,14 +429,18 @@ func lastRefresh(dir string) time.Time {
 		return time.Now().In(time.UTC)
 	}
 
-	infos, err := ioutil.ReadDir(dir)
-	if len(infos) == 0 || err != nil {
+	fds, err := os.ReadDir(dir)
+	if len(fds) == 0 || err != nil {
 		return time.Time{} // zero time because there's no initial data
 	}
 
-	oldest := infos[0].ModTime()
-	for i := range infos[1:] {
-		if t := infos[i].ModTime(); t.Before(oldest) {
+	oldest := time.Now().In(time.UTC)
+	for i := range fds {
+		info, err := fds[i].Info()
+		if err != nil {
+			continue
+		}
+		if t := info.ModTime(); t.Before(oldest) {
 			oldest = t
 		}
 	}

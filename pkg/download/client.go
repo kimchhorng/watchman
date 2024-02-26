@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,17 +67,20 @@ func (dl *Downloader) GetFiles(initialDir string, namesAndSources map[string]str
 	}
 	// Create a temporary directory for downloads if needed
 	if dir == "" {
-		temp, err := ioutil.TempDir("", "downloader")
+		temp, err := os.MkdirTemp("", "downloader")
 		if err != nil {
 			return nil, fmt.Errorf("downloader: unable to make temp dir: %v", err)
 		}
 		dir = temp
 	}
 
-	localFiles, err := ioutil.ReadDir(dir)
+	localFiles, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("readdir %s: %v", dir, err)
 	}
+
+	var mu sync.Mutex
+	var out []string
 
 	var wg sync.WaitGroup
 	wg.Add(len(namesAndSources))
@@ -87,6 +90,9 @@ func (dl *Downloader) GetFiles(initialDir string, namesAndSources map[string]str
 		for i := range localFiles {
 			if strings.EqualFold(filepath.Base(localFiles[i].Name()), name) {
 				found = true
+				mu.Lock()
+				out = append(out, filepath.Join(dir, localFiles[i].Name()))
+				mu.Unlock()
 				break
 			}
 		}
@@ -95,48 +101,72 @@ func (dl *Downloader) GetFiles(initialDir string, namesAndSources map[string]str
 			wg.Done()
 			continue
 		}
+
 		// Download missing files
 		go func(wg *sync.WaitGroup, filename, downloadURL string) {
 			defer wg.Done()
-			dl.retryDownload(dir, filename, downloadURL)
+
+			logger := dl.createLogger(filename, downloadURL)
+
+			startTime := time.Now().In(time.UTC)
+			err := dl.retryDownload(dir, filename, downloadURL)
+			dur := time.Now().In(time.UTC).Sub(startTime)
+
+			if err != nil {
+				logger.Error().LogErrorf("FAILURE after %v to download: %v", dur, err)
+			} else {
+				logger.Info().Logf("successful download after %v", dur)
+			}
+
+			mu.Lock()
+			out = append(out, filepath.Join(dir, filename))
+			mu.Unlock()
 		}(&wg, name, source)
 	}
-
 	wg.Wait()
 
-	// count files and error if the count isn't what we expected
-	fds, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("problem reading data directory: %v", err)
-	}
-	var out []string
-	for i := range fds {
-		out = append(out, filepath.Join(dir, filepath.Base(fds[i].Name())))
-	}
 	return out, nil
 }
 
-func (dl *Downloader) retryDownload(dir, filename, downloadURL string) {
+func (dl *Downloader) createLogger(filename, downloadURL string) log.Logger {
+	var host string
+	u, _ := url.Parse(downloadURL)
+	if u != nil {
+		host = u.Host
+	}
+	return dl.Logger.With(log.Fields{
+		"host":     log.String(host),
+		"filename": log.String(filename),
+	})
+}
+
+func (dl *Downloader) retryDownload(dir, filename, downloadURL string) error {
 	// Allow a couple retries for various sources (some are flakey)
 	for i := 0; i < 3; i++ {
-		req, err := http.NewRequest("GET", downloadURL, nil)
+		req, err := http.NewRequest(http.MethodGet, downloadURL, nil)
 		if err != nil {
-			dl.Logger.Error().LogErrorf("error building HTTP request: %v", err)
-			return
+			return dl.Logger.Error().LogErrorf("error building HTTP request: %v", err).Err()
 		}
 		req.Header.Set("User-Agent", fmt.Sprintf("moov-io/watchman:%v", watchman.Version))
+		// in order to get passed europes 406 (Not Accepted)
+		req.Header.Set("accept-language", "en-US,en;q=0.9")
 
 		resp, err := dl.HTTP.Do(req)
 		if err != nil {
+			dl.Logger.Error().LogErrorf("err while doing client request: ", err)
 			time.Sleep(100 * time.Millisecond)
 			continue // retry
+		}
+
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			dl.Logger.Error().LogErrorf("we experienced a problem in the dl: %v", resp.StatusCode)
 		}
 
 		// Copy resp.Body into a file in our temp dir
 		fd, err := os.Create(filepath.Join(dir, filename))
 		if err != nil {
 			resp.Body.Close()
-			return
+			return fmt.Errorf("attempt %d failed to create file: %v", i, err)
 		}
 
 		io.Copy(fd, resp.Body) // copy file contents
@@ -144,6 +174,7 @@ func (dl *Downloader) retryDownload(dir, filename, downloadURL string) {
 		// close the open files
 		fd.Close()
 		resp.Body.Close()
-		return // quit after successful download
+		return nil // quit after successful download
 	}
+	return nil
 }

@@ -31,8 +31,12 @@ var (
 	}, []string{"type"})
 )
 
+// TODO: modify existing search endpoint with additional eu info and add an eu only endpoint
 func addSearchRoutes(logger log.Logger, r *mux.Router, searcher *searcher) {
 	r.Methods("GET").Path("/search").HandlerFunc(search(logger, searcher))
+	r.Methods("GET").Path("/search/us-csl").HandlerFunc(searchUSCSL(logger, searcher))
+	r.Methods("GET").Path("/search/eu-csl").HandlerFunc(searchEUCSL(logger, searcher))
+	r.Methods("GET").Path("/search/uk-csl").HandlerFunc(searchUKCSL(logger, searcher))
 }
 
 func extractSearchLimit(r *http.Request) int {
@@ -85,58 +89,38 @@ func readAddressSearchRequest(u *url.URL) addressSearchRequest {
 func search(logger log.Logger, searcher *searcher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w = wrapResponseWriter(logger, w, r)
-		requestID := moovhttp.GetRequestID(r)
 
 		// Search over all fields
 		if q := strings.TrimSpace(r.URL.Query().Get("q")); q != "" {
-			logger.Info().With(log.Fields{
-				"requestID": log.String(requestID),
-			}).Logf("searching all names and address for %s", q)
-			searchViaQ(logger, searcher, q)(w, r)
+			searchViaQ(searcher, q)(w, r)
 			return
 		}
 
 		// Search by ID (found in an SDN's Remarks property)
 		if id := strings.TrimSpace(r.URL.Query().Get("id")); id != "" {
-			logger.Info().With(log.Fields{
-				"requestID": log.String(requestID),
-			}).Logf("searching SDNs by remarks ID for %s", id)
-			searchByRemarksID(logger, searcher, id)(w, r)
+			searchByRemarksID(searcher, id)(w, r)
 			return
 		}
 
 		// Search by Name
 		if name := strings.TrimSpace(r.URL.Query().Get("name")); name != "" {
 			if req := readAddressSearchRequest(r.URL); !req.empty() {
-				logger.Info().With(log.Fields{
-					"requestID": log.String(requestID),
-				}).Logf("searching SDN names='%s' and addresses", name)
-				searchViaAddressAndName(logger, searcher, name, req)(w, r)
-				return
+				searchViaAddressAndName(searcher, name, req)(w, r)
+			} else {
+				searchByName(searcher, name)(w, r)
 			}
-
-			logger.Info().With(log.Fields{
-				"requestID": log.String(requestID),
-			}).Logf("searching SDN names for %s", name)
-			searchByName(logger, searcher, name)(w, r)
 			return
 		}
 
 		// Search by Alt Name
 		if alt := strings.TrimSpace(r.URL.Query().Get("altName")); alt != "" {
-			logger.Info().With(log.Fields{
-				"requestID": log.String(requestID),
-			}).Logf("searching SDN alt names for %s", alt)
-			searchByAltName(logger, searcher, alt)(w, r)
+			searchByAltName(searcher, alt)(w, r)
 			return
 		}
 
 		// Search Addresses
 		if req := readAddressSearchRequest(r.URL); !req.empty() {
-			logger.Info().With(log.Fields{
-				"requestID": log.String(requestID),
-			}).Logf("searching address for %#v", req)
-			searchByAddress(logger, searcher, req)(w, r)
+			searchByAddress(searcher, req)(w, r)
 			return
 		}
 
@@ -155,9 +139,26 @@ type searchResponse struct {
 	DeniedPersons []DP `json:"deniedPersons"`
 
 	// Consolidated Screening List
-	BISEntities       []*Result[csl.EL]  `json:"bisEntities"`
-	MilitaryEndUsers  []*Result[csl.MEU] `json:"militaryEndUsers"`
-	SectoralSanctions []*Result[csl.SSI] `json:"sectoralSanctions"`
+	BISEntities                            []*Result[csl.EL]     `json:"bisEntities"`
+	MilitaryEndUsers                       []*Result[csl.MEU]    `json:"militaryEndUsers"`
+	SectoralSanctions                      []*Result[csl.SSI]    `json:"sectoralSanctions"`
+	Unverified                             []*Result[csl.UVL]    `json:"unverifiedCSL"`
+	NonproliferationSanctions              []*Result[csl.ISN]    `json:"nonproliferationSanctions"`
+	ForeignSanctionsEvaders                []*Result[csl.FSE]    `json:"foreignSanctionsEvaders"`
+	PalestinianLegislativeCouncil          []*Result[csl.PLC]    `json:"palestinianLegislativeCouncil"`
+	CaptaList                              []*Result[csl.CAP]    `json:"captaList"`
+	ITARDebarred                           []*Result[csl.DTC]    `json:"itarDebarred"`
+	NonSDNChineseMilitaryIndustrialComplex []*Result[csl.CMIC]   `json:"nonSDNChineseMilitaryIndustrialComplex"`
+	NonSDNMenuBasedSanctionsList           []*Result[csl.NS_MBS] `json:"nonSDNMenuBasedSanctionsList"`
+
+	// EU - Consolidated Sanctions List
+	EUCSL []*Result[csl.EUCSLRecord] `json:"euConsolidatedSanctionsList"`
+
+	// UK - Consolidated Sanctions List
+	UKCSL []*Result[csl.UKCSLRecord] `json:"ukConsolidatedSanctionsList"`
+
+	// UK Sanctions List
+	UKSanctionsList []*Result[csl.UKSanctionsListRecord] `json:"ukSanctionsList"`
 
 	// Metadata
 	RefreshedAt time.Time `json:"refreshedAt"`
@@ -186,7 +187,7 @@ func buildAddressCompares(req addressSearchRequest) []func(*Address) *item {
 	return compares
 }
 
-func searchByAddress(logger log.Logger, searcher *searcher, req addressSearchRequest) http.HandlerFunc {
+func searchByAddress(searcher *searcher, req addressSearchRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if req.empty() {
 			w.WriteHeader(http.StatusBadRequest)
@@ -221,7 +222,7 @@ func searchByAddress(logger log.Logger, searcher *searcher, req addressSearchReq
 	}
 }
 
-func searchViaQ(logger log.Logger, searcher *searcher, name string) http.HandlerFunc {
+func searchViaQ(searcher *searcher, name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name = strings.TrimSpace(name)
 		if name == "" {
@@ -252,7 +253,7 @@ func searchViaQ(logger log.Logger, searcher *searcher, name string) http.Handler
 type searchGather func(searcher *searcher, filters filterRequest, limit int, minMatch float64, name string, resp *searchResponse)
 
 var (
-	gatherings = []searchGather{
+	baseGatherings = []searchGather{
 		// OFAC SDN Search
 		func(s *searcher, filters filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			sdns := s.FindSDNsByRemarksID(limit, name)
@@ -274,8 +275,10 @@ var (
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.DeniedPersons = s.TopDPs(limit, minMatch, name)
 		},
+	}
 
-		// Consolidated Screening List Results
+	// Consolidated Screening List Results
+	cslGatherings = []searchGather{
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.BISEntities = s.TopBISEntities(limit, minMatch, name)
 		},
@@ -285,18 +288,65 @@ var (
 		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
 			resp.SectoralSanctions = s.TopSSIs(limit, minMatch, name)
 		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.Unverified = s.TopUVLs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.NonproliferationSanctions = s.TopISNs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.ForeignSanctionsEvaders = s.TopFSEs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.PalestinianLegislativeCouncil = s.TopPLCs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.CaptaList = s.TopCAPs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.ITARDebarred = s.TopDTCs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.NonSDNChineseMilitaryIndustrialComplex = s.TopCMICs(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.NonSDNMenuBasedSanctionsList = s.TopNS_MBS(limit, minMatch, name)
+		},
 	}
+
+	// eu - consolidated sanctions list
+	euGatherings = []searchGather{
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.EUCSL = s.TopEUCSL(limit, minMatch, name)
+		},
+	}
+
+	// uk - consolidated sanctions list
+	ukGatherings = []searchGather{
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.UKCSL = s.TopUKCSL(limit, minMatch, name)
+		},
+		func(s *searcher, _ filterRequest, limit int, minMatch float64, name string, resp *searchResponse) {
+			resp.UKSanctionsList = s.TopUKSanctionsList(limit, minMatch, name)
+		},
+	}
+
+	allGatherings = append(append(append(baseGatherings, cslGatherings...), euGatherings...), ukGatherings...)
 )
 
 func buildFullSearchResponse(searcher *searcher, filters filterRequest, limit int, minMatch float64, name string) *searchResponse {
+	return buildFullSearchResponseWith(searcher, allGatherings, filters, limit, minMatch, name)
+}
+
+func buildFullSearchResponseWith(searcher *searcher, searchGatherings []searchGather, filters filterRequest, limit int, minMatch float64, name string) *searchResponse {
 	resp := searchResponse{
 		RefreshedAt: searcher.lastRefreshedAt,
 	}
 	var wg sync.WaitGroup
-	wg.Add(len(gatherings))
-	for i := range gatherings {
+	wg.Add(len(searchGatherings))
+	for i := range searchGatherings {
 		go func(i int) {
-			gatherings[i](searcher, filters, limit, minMatch, name, &resp)
+			searchGatherings[i](searcher, filters, limit, minMatch, name, &resp)
 			wg.Done()
 		}(i)
 	}
@@ -304,7 +354,7 @@ func buildFullSearchResponse(searcher *searcher, filters filterRequest, limit in
 	return &resp
 }
 
-func searchViaAddressAndName(logger log.Logger, searcher *searcher, name string, req addressSearchRequest) http.HandlerFunc {
+func searchViaAddressAndName(searcher *searcher, name string, req addressSearchRequest) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name = strings.TrimSpace(name)
 		if name == "" || req.empty() {
@@ -337,7 +387,7 @@ func searchViaAddressAndName(logger log.Logger, searcher *searcher, name string,
 	}
 }
 
-func searchByRemarksID(logger log.Logger, searcher *searcher, id string) http.HandlerFunc {
+func searchByRemarksID(searcher *searcher, id string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if id == "" {
 			moovhttp.Problem(w, errNoSearchParams)
@@ -365,7 +415,7 @@ func searchByRemarksID(logger log.Logger, searcher *searcher, id string) http.Ha
 	}
 }
 
-func searchByName(logger log.Logger, searcher *searcher, nameSlug string) http.HandlerFunc {
+func searchByName(searcher *searcher, nameSlug string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		nameSlug = strings.TrimSpace(nameSlug)
 		if nameSlug == "" {
@@ -396,13 +446,19 @@ func searchByName(logger log.Logger, searcher *searcher, nameSlug string) http.H
 			// BIS
 			DeniedPersons: searcher.TopDPs(limit, minMatch, nameSlug),
 			BISEntities:   searcher.TopBISEntities(limit, minMatch, nameSlug),
+			// EUCSL
+			EUCSL: searcher.TopEUCSL(limit, minMatch, nameSlug),
+			// UKCSL
+			UKCSL: searcher.TopUKCSL(limit, minMatch, nameSlug),
+			// UKSanctionsList
+			UKSanctionsList: searcher.TopUKSanctionsList(limit, minMatch, nameSlug),
 			// Metadata
 			RefreshedAt: searcher.lastRefreshedAt,
 		})
 	}
 }
 
-func searchByAltName(logger log.Logger, searcher *searcher, altSlug string) http.HandlerFunc {
+func searchByAltName(searcher *searcher, altSlug string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		altSlug = strings.TrimSpace(altSlug)
 		if altSlug == "" {

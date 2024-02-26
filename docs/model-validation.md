@@ -22,7 +22,17 @@ Watchman's default data sources are several government agency and public data so
 - [United States Consolidated Screening List](https://www.export.gov/article2?id=Consolidated-Screening-List)
    - Department of Commerce – Bureau of Industry and Security
       - [Denied Persons List](http://www.bis.doc.gov/dpl/default.shtm)
+      - [Unverified List](http://www.bis.doc.gov/enforcement/unverifiedlist/unverified_parties.html)
       - [Entity List](http://www.bis.doc.gov/entities/default.htm)
+   - Department of State – Bureau of International Security and Non-proliferation
+      - [Nonproliferation Sanctions](http://www.state.gov/t/isn/c15231.htm)
+   - Department of State – Directorate of Defense Trade Controls
+      - ITAR Debarred (DTC)
+   - Department of the Treasury – Office of Foreign Assets Control
+      - [Specially Designated Nationals List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/default.aspx)
+      - [Foreign Sanctions Evaders List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/fse_list.aspx)
+      - [Sectoral Sanctions Identifications List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/ssi_list.aspx)
+      - [Palestinian Legislative Council List](https://www.treasury.gov/resource-center/sanctions/Terrorism-Proliferation-Narcotics/Pages/pa.aspx)
    - Department of the Treasury – Office of Foreign Assets Control
       - [Sectoral Sanctions Identifications List](http://www.treasury.gov/resource-center/sanctions/SDN-List/Pages/ssi_list.aspx)
 
@@ -41,6 +51,14 @@ Periodic searches of names, addresses, IDs, etc can be performed by two differen
 
 Search queries return better results when multiple criteria are included with the query. Simple name queries will return false positive matches, so including addresses, alternate names, and other fields are suggested.
 
+### Filtering
+
+OFAC searches can add filters to include results of a certain type. These types can be individuals, businesses, aircraft, and vessels. SDN results can also be filtered by their OFAC program. Address searches can filter by Country
+
+### Deep Inspection
+
+OFAC searches can include exact matches on ID values (e.g. Government ID). These are in the "Remarks" section of each entity.
+
 ## Checks Not Performed
 
 BSA/AML programs have requirements that are outside of Watchman, such as ownership calculations (thresholds, shell corporations, indirect majority shares), family relationships, and other risk analysis.
@@ -56,7 +74,7 @@ A web UI is included with Watchman for inspecting OFAC results.
 - [FDIC Bank Secrecy Act / Anti-Money Laundering](https://www.fdic.gov/resources/bankers/bank-secrecy-act/)
 - [FFIEC BSA/AML Risk Assessment](https://bsaaml.ffiec.gov/manual/BSAAMLRiskAssessment/01)
 - [Frequently Asked Questions Regarding Customer Due Diligence Requirements for Financial Institutions](https://www.fincen.gov/sites/default/files/2018-04/FinCEN_Guidance_CDD_FAQ_FINAL_508_2.pdf)
-- [OFAC FAQ #249 - How is the Score calculated?](https://home.treasury.gov/policy-issues/financial-sanctions/faqs/topic/1636)
+- [OFAC FAQ #249 - How is the Score calculated?](https://ofac.treasury.gov/faqs/249)
 - [Sound Practices for Model Risk Management: Supervisory Guidance on Model Risk Management](https://www.occ.gov/news-issuances/bulletins/2011/bulletin-2011-12.html)
 - [Application of Jaro-Winkler String Comparator in Enhancing Veterans Administrative Records](https://nces.ed.gov/FCSM/pdf/H_4HyoParkFCSM2018final.pdf)
 - [Efficient Approximate Entity Matching Using Jaro-Winkler Distance](https://jqin.gitee.io/files/wise2017-wang.pdf)

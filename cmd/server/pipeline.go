@@ -24,9 +24,24 @@ type Name struct {
 	Processed string
 
 	// optional metadata of where a name came from
-	alt   *ofac.AlternateIdentity
-	sdn   *ofac.SDN
-	ssi   *csl.SSI
+	alt    *ofac.AlternateIdentity
+	sdn    *ofac.SDN
+	ssi    *csl.SSI
+	uvl    *csl.UVL
+	isn    *csl.ISN
+	fse    *csl.FSE
+	plc    *csl.PLC
+	cap    *csl.CAP
+	dtc    *csl.DTC
+	cmic   *csl.CMIC
+	ns_mbs *csl.NS_MBS
+
+	eu_csl *csl.EUCSLRecord
+
+	uk_csl *csl.UKCSLRecord
+
+	uk_sanctionsList *csl.UKSanctionsListRecord
+
 	dp    *dpl.DPL
 	el    *csl.EL
 	addrs []*ofac.Address
@@ -79,6 +94,95 @@ func cslName(item interface{}) *Name {
 			ssi:       v,
 			altNames:  v.AlternateNames,
 		}
+	case *csl.UVL:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			uvl:       v,
+		}
+	case *csl.ISN:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			isn:       v,
+			altNames:  v.AlternateNames,
+		}
+	case *csl.FSE:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			fse:       v,
+		}
+	case *csl.PLC:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			plc:       v,
+			altNames:  v.AlternateNames,
+		}
+	case *csl.CAP:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			cap:       v,
+			altNames:  v.AlternateNames,
+		}
+	case *csl.DTC:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			dtc:       v,
+			altNames:  v.AlternateNames,
+		}
+	case *csl.CMIC:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			cmic:      v,
+			altNames:  v.AlternateNames,
+		}
+	case *csl.NS_MBS:
+		return &Name{
+			Original:  v.Name,
+			Processed: v.Name,
+			ns_mbs:    v,
+			altNames:  v.AlternateNames,
+		}
+	case *csl.EUCSLRecord:
+		if len(v.NameAliasWholeNames) >= 1 {
+			var alts []string
+			alts = append(alts, v.NameAliasWholeNames...)
+			return &Name{
+				Original:  v.NameAliasWholeNames[0],
+				Processed: v.NameAliasWholeNames[0],
+				eu_csl:    v,
+				altNames:  alts,
+			}
+		}
+	case *csl.UKCSLRecord:
+		if len(v.Names) >= 1 {
+			var alts []string
+			alts = append(alts, v.Names...)
+			return &Name{
+				Original:  v.Names[0],
+				Processed: v.Names[0],
+				uk_csl:    v,
+				altNames:  alts,
+			}
+		}
+	case *csl.UKSanctionsListRecord:
+		if len(v.Names) >= 1 {
+			var alts []string
+			alts = append(alts, v.Names...)
+			return &Name{
+				Original:         v.Names[0],
+				Processed:        v.Names[0],
+				uk_sanctionsList: v,
+				altNames:         alts,
+			}
+		}
+
+		return &Name{}
 	}
 	return &Name{}
 }
