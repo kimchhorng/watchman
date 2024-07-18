@@ -16,7 +16,7 @@ jobs:
         uses: docker/build-push-action@v1
         with:
           registry: ghcr.io
-          username: "sophanith2020"
+          username: "thisisfeeder"
           password: ${{ secrets.GHCIO }}
           repository: mbanq/watchman
           tags: dev-latest
