@@ -6,6 +6,7 @@ package search
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/url"
@@ -107,6 +108,7 @@ func Search(logger log.Logger, searcher *Searcher) http.HandlerFunc {
 			if req := readAddressSearchRequest(r.URL); !req.empty() {
 				searchViaAddressAndName(searcher, name, req)(w, r)
 			} else {
+				fmt.Printf("searchByName: %v\n", name)
 				searchByName(searcher, name)(w, r)
 			}
 			return
@@ -419,16 +421,18 @@ func searchByName(searcher *Searcher, nameSlug string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		nameSlug = strings.TrimSpace(nameSlug)
 		if nameSlug == "" {
+			fmt.Println("name is empty")
 			moovhttp.Problem(w, errNoSearchParams)
 			return
 		}
 
 		limit := extractSearchLimit(r)
 		minMatch := extractSearchMinMatch(r)
+		fmt.Printf("limit: %v, minMatch: %v, nameSlug: %v\n", limit, minMatch, nameSlug)
 
 		// Grab the SDN's and then filter any out based on query params
 		sdns := searcher.TopSDNs(limit, minMatch, nameSlug, keepSDN(buildFilterRequest(r.URL)))
-
+		fmt.Printf("sdns: %v\n", sdns)
 		// record Prometheus metrics
 		if len(sdns) > 0 {
 			matchHist.With("type", "name").Observe(sdns[0].match)

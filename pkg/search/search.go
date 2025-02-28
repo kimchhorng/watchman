@@ -611,7 +611,7 @@ func findAddresses(entityID string, addrs []*ofac.Address) []*ofac.Address {
 	return out
 }
 
-func precomputeSDNs(sdns []*ofac.SDN, addrs []*ofac.Address, pipe *Pipeliner) []*SDN {
+func PrecomputeSDNs(sdns []*ofac.SDN, addrs []*ofac.Address, pipe *Pipeliner) []*SDN {
 	out := make([]*SDN, len(sdns))
 	for i := range sdns {
 		nn := sdnName(sdns[i], findAddresses(sdns[i].EntityID, addrs))
@@ -651,7 +651,7 @@ func (a Address) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func precomputeAddresses(adds []*ofac.Address) []*Address {
+func PrecomputeAddresses(adds []*ofac.Address) []*Address {
 	out := make([]*Address, len(adds))
 	for i := range adds {
 		out[i] = &Address{
@@ -691,7 +691,7 @@ func (a Alt) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func precomputeAlts(alts []*ofac.AlternateIdentity, pipe *Pipeliner) []*Alt {
+func PrecomputeAlts(alts []*ofac.AlternateIdentity, pipe *Pipeliner) []*Alt {
 	out := make([]*Alt, len(alts))
 	for i := range alts {
 		an := altName(alts[i])
@@ -730,7 +730,7 @@ func (d DP) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func precomputeDPs(persons []*dpl.DPL, pipe *Pipeliner) []*DP {
+func PrecomputeDPs(persons []*dpl.DPL, pipe *Pipeliner) []*DP {
 	out := make([]*DP, len(persons))
 	for i := range persons {
 		nn := dpName(persons[i])

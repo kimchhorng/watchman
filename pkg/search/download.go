@@ -155,7 +155,7 @@ func (s *Searcher) periodicDataRefresh(interval time.Duration, downloadRepo down
 	}
 }
 
-func ofacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
+func OfacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 	files, err := ofac.Download(logger, initialDir)
 	if err != nil {
 		return nil, fmt.Errorf("download: %v", err)
@@ -191,7 +191,7 @@ func ofacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 	return res, err
 }
 
-func dplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
+func DplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
 	file, err := dpl.Download(logger, initialDir)
 	if err != nil {
 		return nil, err
@@ -199,7 +199,7 @@ func dplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
 	return dpl.Read(file)
 }
 
-func cslRecords(logger log.Logger, initialDir string) (*csl.CSL, error) {
+func CslRecords(logger log.Logger, initialDir string) (*csl.CSL, error) {
 	file, err := csl.Download(logger, initialDir)
 	if err != nil {
 		logger.Warn().Logf("skipping CSL download: %v", err)
@@ -212,7 +212,7 @@ func cslRecords(logger log.Logger, initialDir string) (*csl.CSL, error) {
 	return cslRecords, err
 }
 
-func euCSLRecords(logger log.Logger, initialDir string) ([]*csl.EUCSLRecord, error) {
+func EuCSLRecords(logger log.Logger, initialDir string) ([]*csl.EUCSLRecord, error) {
 	file, err := csl.DownloadEU(logger, initialDir)
 	if err != nil {
 		logger.Warn().Logf("skipping EU CSL download: %v", err)
@@ -226,7 +226,7 @@ func euCSLRecords(logger log.Logger, initialDir string) ([]*csl.EUCSLRecord, err
 	return cslRecords, err
 }
 
-func ukCSLRecords(logger log.Logger, initialDir string) ([]*csl.UKCSLRecord, error) {
+func UkCSLRecords(logger log.Logger, initialDir string) ([]*csl.UKCSLRecord, error) {
 	file, err := csl.DownloadUKCSL(logger, initialDir)
 	if err != nil {
 		logger.Warn().Logf("skipping UK CSL download: %v", err)
@@ -240,7 +240,7 @@ func ukCSLRecords(logger log.Logger, initialDir string) ([]*csl.UKCSLRecord, err
 	return cslRecords, err
 }
 
-func ukSanctionsListRecords(logger log.Logger, initialDir string) ([]*csl.UKSanctionsListRecord, error) {
+func UkSanctionsListRecords(logger log.Logger, initialDir string) ([]*csl.UKSanctionsListRecord, error) {
 	file, err := csl.DownloadUKSanctionsList(logger, initialDir)
 	if err != nil {
 		logger.Warn().Logf("skipping UK Sanctions List download: %v", err)
@@ -272,70 +272,70 @@ func (s *Searcher) refreshData(initialDir string) (*DownloadStats, error) {
 
 	lastDataRefreshFailure.WithLabelValues("SDNs").Set(float64(time.Now().Unix()))
 
-	results, err := ofacRecords(s.logger, initialDir)
+	results, err := OfacRecords(s.logger, initialDir)
 	if err != nil {
 		lastDataRefreshFailure.WithLabelValues("SDNs").Set(float64(time.Now().Unix()))
 		stats.Errors = append(stats.Errors, fmt.Errorf("OFAC: %v", err))
 	}
 
-	sdns := precomputeSDNs(results.SDNs, results.Addresses, s.pipe)
-	adds := precomputeAddresses(results.Addresses)
-	alts := precomputeAlts(results.AlternateIdentities, s.pipe)
+	sdns := PrecomputeSDNs(results.SDNs, results.Addresses, s.pipe)
+	adds := PrecomputeAddresses(results.Addresses)
+	alts := PrecomputeAlts(results.AlternateIdentities, s.pipe)
 
-	deniedPersons, err := dplRecords(s.logger, initialDir)
+	deniedPersons, err := DplRecords(s.logger, initialDir)
 	if err != nil {
 		lastDataRefreshFailure.WithLabelValues("DPs").Set(float64(time.Now().Unix()))
 		stats.Errors = append(stats.Errors, fmt.Errorf("DPL: %v", err))
 	}
-	dps := precomputeDPs(deniedPersons, s.pipe)
+	dps := PrecomputeDPs(deniedPersons, s.pipe)
 
-	euConsolidatedList, err := euCSLRecords(s.logger, initialDir)
+	euConsolidatedList, err := EuCSLRecords(s.logger, initialDir)
 	if err != nil {
 		lastDataRefreshFailure.WithLabelValues("EUCSL").Set(float64(time.Now().Unix()))
 		stats.Errors = append(stats.Errors, fmt.Errorf("EUCSL: %v", err))
 	}
 
-	euCSLs := precomputeCSLEntities[csl.EUCSLRecord](euConsolidatedList, s.pipe)
+	euCSLs := PrecomputeCSLEntities[csl.EUCSLRecord](euConsolidatedList, s.pipe)
 
-	ukConsolidatedList, err := ukCSLRecords(s.logger, initialDir)
+	ukConsolidatedList, err := UkCSLRecords(s.logger, initialDir)
 	if err != nil {
 		lastDataRefreshFailure.WithLabelValues("UKCSL").Set(float64(time.Now().Unix()))
 		stats.Errors = append(stats.Errors, fmt.Errorf("UKCSL: %v", err))
 	}
 
-	ukCSLs := precomputeCSLEntities[csl.UKCSLRecord](ukConsolidatedList, s.pipe)
+	ukCSLs := PrecomputeCSLEntities[csl.UKCSLRecord](ukConsolidatedList, s.pipe)
 
 	var ukSLs []*Result[csl.UKSanctionsListRecord]
 	withSanctionsList := os.Getenv("WITH_UK_SANCTIONS_LIST")
 	if strings.ToLower(withSanctionsList) == "true" {
-		ukSanctionsList, err := ukSanctionsListRecords(s.logger, initialDir)
+		ukSanctionsList, err := UkSanctionsListRecords(s.logger, initialDir)
 		if err != nil {
 			lastDataRefreshFailure.WithLabelValues("UKSanctionsList").Set(float64(time.Now().Unix()))
 			stats.Errors = append(stats.Errors, fmt.Errorf("UKSanctionsList: %v", err))
 		}
-		ukSLs = precomputeCSLEntities[csl.UKSanctionsListRecord](ukSanctionsList, s.pipe)
+		ukSLs = PrecomputeCSLEntities[csl.UKSanctionsListRecord](ukSanctionsList, s.pipe)
 
 		stats.UKSanctionsList = len(ukSLs)
 		lastDataRefreshCount.WithLabelValues("UKSL").Set(float64(len(ukSLs)))
 	}
 
 	// csl records from US downloaded here
-	consolidatedLists, err := cslRecords(s.logger, initialDir)
+	consolidatedLists, err := CslRecords(s.logger, initialDir)
 	if err != nil {
 		lastDataRefreshFailure.WithLabelValues("CSL").Set(float64(time.Now().Unix()))
 		stats.Errors = append(stats.Errors, fmt.Errorf("CSL: %v", err))
 	}
-	els := precomputeCSLEntities[csl.EL](consolidatedLists.ELs, s.pipe)
-	meus := precomputeCSLEntities[csl.MEU](consolidatedLists.MEUs, s.pipe)
-	ssis := precomputeCSLEntities[csl.SSI](consolidatedLists.SSIs, s.pipe)
-	uvls := precomputeCSLEntities[csl.UVL](consolidatedLists.UVLs, s.pipe)
-	isns := precomputeCSLEntities[csl.ISN](consolidatedLists.ISNs, s.pipe)
-	fses := precomputeCSLEntities[csl.FSE](consolidatedLists.FSEs, s.pipe)
-	plcs := precomputeCSLEntities[csl.PLC](consolidatedLists.PLCs, s.pipe)
-	caps := precomputeCSLEntities[csl.CAP](consolidatedLists.CAPs, s.pipe)
-	dtcs := precomputeCSLEntities[csl.DTC](consolidatedLists.DTCs, s.pipe)
-	cmics := precomputeCSLEntities[csl.CMIC](consolidatedLists.CMICs, s.pipe)
-	ns_mbss := precomputeCSLEntities[csl.NS_MBS](consolidatedLists.NS_MBSs, s.pipe)
+	els := PrecomputeCSLEntities[csl.EL](consolidatedLists.ELs, s.pipe)
+	meus := PrecomputeCSLEntities[csl.MEU](consolidatedLists.MEUs, s.pipe)
+	ssis := PrecomputeCSLEntities[csl.SSI](consolidatedLists.SSIs, s.pipe)
+	uvls := PrecomputeCSLEntities[csl.UVL](consolidatedLists.UVLs, s.pipe)
+	isns := PrecomputeCSLEntities[csl.ISN](consolidatedLists.ISNs, s.pipe)
+	fses := PrecomputeCSLEntities[csl.FSE](consolidatedLists.FSEs, s.pipe)
+	plcs := PrecomputeCSLEntities[csl.PLC](consolidatedLists.PLCs, s.pipe)
+	caps := PrecomputeCSLEntities[csl.CAP](consolidatedLists.CAPs, s.pipe)
+	dtcs := PrecomputeCSLEntities[csl.DTC](consolidatedLists.DTCs, s.pipe)
+	cmics := PrecomputeCSLEntities[csl.CMIC](consolidatedLists.CMICs, s.pipe)
+	ns_mbss := PrecomputeCSLEntities[csl.NS_MBS](consolidatedLists.NS_MBSs, s.pipe)
 
 	// OFAC
 	stats.SDNs = len(sdns)

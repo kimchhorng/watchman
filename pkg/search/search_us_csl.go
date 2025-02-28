@@ -37,7 +37,7 @@ func searchUSCSL(logger log.Logger, searcher *Searcher) http.HandlerFunc {
 	}
 }
 
-func precomputeCSLEntities[T any](items []*T, pipe *Pipeliner) []*Result[T] {
+func PrecomputeCSLEntities[T any](items []*T, pipe *Pipeliner) []*Result[T] {
 	out := make([]*Result[T], len(items))
 
 	for i, item := range items {
