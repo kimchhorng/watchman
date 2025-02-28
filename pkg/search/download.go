@@ -174,8 +174,10 @@ func OfacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 	)
 	var files []string
 	for i := range ofacFilenames {
-		files = append(files, fmt.Sprintf(initialDir, ofacFilenames[i]))
+		// concat initialDir and filename and append to files
+		files = append(files, fmt.Sprintf("%s/%s", initialDir, ofacFilenames[i]))
 	}
+	logger.Info().Logf("Read from files: %v", files)
 	var res *ofac.Results
 
 	for i := range files {
@@ -200,7 +202,7 @@ func OfacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 			}
 		}
 	}
-	return res, err
+	return res, nil
 }
 
 func DplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
@@ -208,7 +210,8 @@ func DplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
 	//if err != nil {
 	//	return nil, err
 	//}
-	file = fmt.Sprintf(initialDir, "dpl.txt")
+	file := fmt.Sprintf(initialDir, "dpl.txt")
+	logger.Info().Logf("Read from file: %v", file)
 	return dpl.Read(file)
 }
 
