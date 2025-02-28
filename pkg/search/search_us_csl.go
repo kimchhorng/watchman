@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/kimchhorng/watchman/pkg/csl"
 	moovhttp "github.com/moov-io/base/http"
 	"github.com/moov-io/base/log"
+	"github.com/moov-io/watchman/pkg/csl"
 )
 
 func searchUSCSL(logger log.Logger, searcher *Searcher) http.HandlerFunc {
