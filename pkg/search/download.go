@@ -156,14 +156,26 @@ func (s *Searcher) periodicDataRefresh(interval time.Duration, downloadRepo down
 }
 
 func OfacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
-	files, err := ofac.Download(logger, initialDir)
-	if err != nil {
-		return nil, fmt.Errorf("download: %v", err)
+	//files, err := ofac.Download(logger, initialDir)
+	//if err != nil {
+	//	return nil, fmt.Errorf("download: %v", err)
+	//}
+	//if len(files) == 0 {
+	//	return nil, errors.New("no OFAC Results")
+	//}
+	// assign file path to files
+	var (
+		ofacFilenames = []string{
+			"add.csv",          // Address
+			"alt.csv",          // Alternate ID
+			"sdn.csv",          // Specially Designated National
+			"sdn_comments.csv", // Specially Designated National Comments
+		}
+	)
+	var files []string
+	for i := range ofacFilenames {
+		files = append(files, fmt.Sprintf(initialDir, ofacFilenames[i]))
 	}
-	if len(files) == 0 {
-		return nil, errors.New("no OFAC Results")
-	}
-
 	var res *ofac.Results
 
 	for i := range files {
@@ -192,10 +204,11 @@ func OfacRecords(logger log.Logger, initialDir string) (*ofac.Results, error) {
 }
 
 func DplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
-	file, err := dpl.Download(logger, initialDir)
-	if err != nil {
-		return nil, err
-	}
+	//file, err := dpl.Download(logger, initialDir)
+	//if err != nil {
+	//	return nil, err
+	//}
+	file = fmt.Sprintf(initialDir, "dpl.txt")
 	return dpl.Read(file)
 }
 
