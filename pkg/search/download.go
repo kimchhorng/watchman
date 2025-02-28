@@ -210,7 +210,7 @@ func DplRecords(logger log.Logger, initialDir string) ([]*dpl.DPL, error) {
 	//if err != nil {
 	//	return nil, err
 	//}
-	file := fmt.Sprintf(initialDir, "dpl.txt")
+	file := fmt.Sprintf("%s/%s", initialDir, "dpl.txt")
 	logger.Info().Logf("Read from file: %v", file)
 	return dpl.Read(file)
 }
