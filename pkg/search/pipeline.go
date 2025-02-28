@@ -8,10 +8,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/kimchhorng/watchman/pkg/csl"
+	"github.com/kimchhorng/watchman/pkg/dpl"
+	"github.com/kimchhorng/watchman/pkg/ofac"
 	"github.com/moov-io/base/log"
-	"github.com/moov-io/watchman/pkg/csl"
-	"github.com/moov-io/watchman/pkg/dpl"
-	"github.com/moov-io/watchman/pkg/ofac"
 )
 
 // Name represents an individual or entity name to be processed for search.

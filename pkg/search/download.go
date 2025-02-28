@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kimchhorng/watchman/pkg/csl"
+	"github.com/kimchhorng/watchman/pkg/dpl"
+	"github.com/kimchhorng/watchman/pkg/ofac"
 	moovhttp "github.com/moov-io/base/http"
 	"github.com/moov-io/base/log"
-	"github.com/moov-io/watchman/pkg/csl"
-	"github.com/moov-io/watchman/pkg/dpl"
-	"github.com/moov-io/watchman/pkg/ofac"
 
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"

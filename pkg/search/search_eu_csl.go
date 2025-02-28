@@ -8,9 +8,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/kimchhorng/watchman/pkg/csl"
 	moovhttp "github.com/moov-io/base/http"
 	"github.com/moov-io/base/log"
-	"github.com/moov-io/watchman/pkg/csl"
 )
 
 // search EUCLS

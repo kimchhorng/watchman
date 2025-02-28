@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/moov-io/watchman/pkg/ofac"
+	"github.com/kimchhorng/watchman/pkg/ofac"
 
 	"github.com/abadojack/whatlanggo"
 	"github.com/bbalet/stopwords"

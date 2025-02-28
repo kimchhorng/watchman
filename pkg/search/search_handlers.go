@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kimchhorng/watchman/pkg/csl"
 	moovhttp "github.com/moov-io/base/http"
 	"github.com/moov-io/base/log"
-	"github.com/moov-io/watchman/pkg/csl"
 
 	"github.com/go-kit/kit/metrics/prometheus"
 	"github.com/gorilla/mux"
